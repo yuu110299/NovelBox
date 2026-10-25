@@ -1031,8 +1031,23 @@ async def batch(req:BatchRequest):
                                     return {"title":item["title"],"url":item["url"],"content":text,"images":imgs}
                         except httpx.HTTPError:
                             pass
-                    soup,base=await get_page(client,item["url"])
-                    content,images=chapter_body(soup,base)
+                    is_luot=(urlparse(item["url"]).hostname or "").lower().endswith("luotnovel1.site")
+                    try:
+                        soup,base=await get_page(client,item["url"])
+                        content,images=chapter_body(soup,base)
+                    except (httpx.HTTPError,HTTPException):
+                        if not is_luot:
+                            raise
+                        content,images="",[]
+                        base=item["url"]
+                    if is_luot and not content:
+                        try:
+                            rendered=await _render_page(item["url"])
+                            content=rendered.get("content","")
+                        except HTTPException:
+                            pass
+                    if is_luot and not content:
+                        return {"title":item["title"],"url":item["url"],"content":"","images":[],"error":"LuotNovel: không đọc được #textReadingArea qua HTML hoặc trình duyệt máy chủ."}
                     if is_wattpad:
                         # Public chapter HTML is a second source of inline illustrations.
                         extra_text,extra_images=wattpad_story_text(str(soup),base,req.include_images)
@@ -1268,7 +1283,7 @@ async def _render_page(url):
                     const u=new URL(x.url);
                     return (u.pathname.replace(/\\/$/,'')==='/reader' && u.searchParams.has('storyId') && u.searchParams.has('chapter')) || (u.hostname.endsWith('luotnovel1.site') && /(?:chuong|chapter|chap)[-_ /]?\\d+|\\/\\d+(?:\\/|$)/i.test(u.pathname));
                   } catch {return false;}});
-                  const body=document.querySelector('.reader-demo-body,.reader-content,.chapter-content,#chapter-content,[data-chapter-content]');
+                  const body=document.querySelector('#textReadingArea,.reader-demo-body,.reader-content,.chapter-content,#chapter-content,[data-chapter-content]');
                   const ps=body?[...body.querySelectorAll('.chapter-paragraph')]:[];
                   const fallback=body&&!ps.length?[...body.querySelectorAll('p.reader-demo-para,p')]:[];
                   const content=(ps.length?ps:fallback).map(p=>p.textContent.trim()).filter(Boolean).join('\\n\\n');

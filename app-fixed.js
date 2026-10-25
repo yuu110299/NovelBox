@@ -331,8 +331,10 @@ async function coverBytes(){
  if(isTruyenfull&&url&&/^https:\/\/lh3\.googleusercontent\.com\/pw\//i.test(url)){
   // Only Truyenfull: its og:image may use a non-display =w0-h0-c size.
   // Attempt the on-page thumbnail first, then the original URL.
-  const photoBase=url.replace(/=w\d+-h\d+(?:-[a-z-]+)?(?=\?|$)/i,'');
-  const variants=[photoBase+'=w215-h322-s-no',photoBase+'=s0',url];
+  const parsedCover=new URL(url);
+  const photoBase=parsedCover.origin+parsedCover.pathname.replace(/=w\d+-h\d+(?:-[a-z-]+)?$|=s\d+$/i,'');
+  const query=parsedCover.search;
+  const variants=[url,photoBase+'=w215-h322-s-no'+query,photoBase+'=s800'+query];
   let lastError;
   for(const candidate of [...new Set(variants)]){
    try{result=await imageBytes(candidate,true,true);if(result){storyMeta.cover=candidate;break}}

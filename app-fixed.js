@@ -388,6 +388,7 @@ async function coverBytes(){
   }
   if(!result)result=await coverFromPublicRelays(url);
   if(!result)throw new Error('Truyenfull không tải được ảnh bìa từ Googleusercontent hoặc dịch vụ ảnh trung gian. '+(lastError?.message||''));
+ }
  // The live Truyenfull page currently advertises a different cover URL
  // for this specific book than an older cached metadata URL.
  const knownTruyenfullStory=(()=>{try{return new URL(storyUrl).hostname==='truyenfull.live'&&new URL(storyUrl).pathname.replace(/\/$/,'')==='/sau-khi-cam-hoa-vai-chinh-that-bai'}catch{return false}})();

@@ -1402,7 +1402,11 @@ async def luotnovel_discover(url):
                 if link:found[link]={"title":item.get("title") or "Chương "+str(len(found)+1),"url":link}
         except HTTPException:
             pass
-    return {"title":title,"author":"","chapters":list(found.values()),"count":len(found)}
+    cover_node=soup.select_one('meta[property="og:image"]') or soup.select_one('meta[property="og:image:url"]')
+    cover=image_url(base,cover_node.get("content","")) if cover_node else ""
+    description_node=soup.select_one('meta[name="description"]')
+    description=description_node.get("content","") if description_node else ""
+    return {"title":title,"author":"","cover":cover,"description":description,"chapters":list(found.values()),"count":len(found)}
 
 
 

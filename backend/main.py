@@ -1040,20 +1040,24 @@ async def image(req:ReadRequest):
     # Restricted to this Google Photos path, not other websites or sources.
     if u.hostname=="lh3.googleusercontent.com" and u.path.startswith("/pw/"):
         from urllib.parse import quote
-        photo_root=re.sub(r"=w\\d+-h\\d+(?:-[a-z-]+)?$|=s\\d+$","",url)
-        # Put relays FIRST: a slow direct request previously exhausted the
-        # browser's timeout before the fallback was ever attempted.
-        cover_variants=(photo_root+"=w215-h322-s-no",photo_root+"=s800")
-        candidates=["https://wsrv.nl/?url="+quote(photo_url,safe="") for photo_url in cover_variants]
-        candidates.extend(cover_variants)
-        candidates.append(url)
+        # Keep the actual image path and query parameters (including authuser=1).
+        # Earlier regex was double-escaped and appended sizes after the query.
+        from urllib.parse import urlencode
+        root=re.sub(r"=w\d+-h\d+(?:-[a-z-]+)?$|=s\d+$","",u.path)
+        variants=[
+            url,
+            urlunparse((u.scheme,u.netloc,root+"=w215-h322-s-no","",u.query,"")),
+            urlunparse((u.scheme,u.netloc,root+"=s800","",u.query,"")),
+        ]
+        relay=[ "https://wsrv.nl/?url="+quote(v,safe="") for v in variants ]
+        candidates=list(dict.fromkeys([*variants,*relay]))
     async with httpx.AsyncClient(timeout=7 if u.hostname=="lh3.googleusercontent.com" and u.path.startswith("/pw/") else 22,follow_redirects=False,trust_env=False) as client:
         last_error=None
         for candidate in candidates:
             for attempt in range(1 if u.hostname=="lh3.googleusercontent.com" and u.path.startswith("/pw/") else 2):
                 try:
                     r=await client.get(candidate,headers=headers)
-                    if r.status_code in (429,500,502,503,504) and attempt==0:
+                    if r.status_code in (429,500,502,503,504) and attempt==0 and u.hostname!="lh3.googleusercontent.com":
                         await asyncio.sleep(.7)
                         continue
                     r.raise_for_status()

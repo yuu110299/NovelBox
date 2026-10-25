@@ -812,6 +812,14 @@ async def discover(req:ReadRequest):
             description=description or meta("meta[name=description]") or meta("meta[property='og:description']")
             description=re.sub(r"\s*(?:Xem thêm|Thu gọn|Đọc thêm|Show more|Read more)\s*$","",description,flags=re.I).strip()
             host=(urlparse(base).hostname or "").lower()
+            if host.endswith("truyenfull.live"):
+                # The og:image URL can be a broken =w0-h0-c variant. Use the
+                # actual visible cover image on the Truyenfull story page.
+                visible=soup.select_one('img[src*="googleusercontent.com/pw/"],img[data-src*="googleusercontent.com/pw/"]')
+                if visible:
+                    raw=visible.get("data-src") or visible.get("src")
+                    actual=image_url(base,raw)
+                    if actual:cover=actual
             if host.endswith("navyteams.com"):
                 # Verified cover URL supplied for this specific story.
                 if "/truyen/khong-con-la-ban-thuo-nho/" in urlparse(base).path + "/":

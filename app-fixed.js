@@ -273,7 +273,7 @@ async function imageBytes(url,coverMode=false){
  let blob=null;
  for(let attempt=0;attempt<2&&!blob;attempt++){
   const wordpressCover=coverMode&&/^https:\/\/tichvulam\.wordpress\.com\/wp-content\/uploads\//i.test(url);
-  try{blob=await fetchBlob(wordpressCover?attempt===0:attempt!==0,wordpressCover?(attempt===0?45000:6000):(attempt===0?4500:coverMode?45000:14000))}
+  try{blob=await fetchBlob(coverMode?true:attempt!==0,coverMode?35000:(attempt===0?4500:14000))}
   catch(e){console.warn('Thử tải ảnh '+(attempt+1)+'/2',url,e.message)}
  }
  if(!blob)return null;

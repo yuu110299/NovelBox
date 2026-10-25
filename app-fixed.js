@@ -294,7 +294,20 @@ async function coverBytes(){
   if(displayedCoverBytes)return displayedCoverBytes;
  }
  if(navy&&!url)throw Error('NavyTeams chưa trả về URL ảnh bìa. Hãy thu thập lại thông tin truyện.');
- let result=await imageBytes(url,true);
+ let result=null;
+ const isTruyenfull=(()=>{try{return new URL(storyUrl).hostname==='truyenfull.live'}catch{return false}})();
+ if(isTruyenfull&&url&&/^https:\/\/lh3\\.googleusercontent\\.com\/pw\//i.test(url)){
+  // Only Truyenfull: its og:image may use a non-display =w0-h0-c size.
+  // Attempt the on-page thumbnail first, then the original URL.
+  const photoBase=url.replace(/=w\\d+-h\\d+(?:-[a-z-]+)?(?=\\?|$)/i,'');
+  const variants=[photoBase+'=w215-h322-s-no',photoBase+'=s0',url];
+  let lastError;
+  for(const candidate of [...new Set(variants)]){
+   try{result=await imageBytes(candidate,true);if(result){storyMeta.cover=candidate;break}}
+   catch(error){lastError=error;console.warn('Truyenfull cover candidate failed',candidate,error.message)}
+  }
+  if(!result)throw new Error('Truyenfull không tải được ảnh bìa sau khi thử các URL ảnh gốc: '+(lastError?.message||url));
+ }else result=await imageBytes(url,true);
  // Verified cover for Nhất phẩm phu nhân on tichvulam WordPress.
  // Only use this fallback for this story, never for other books on the blog.
  const isTichVuLamBook=(()=>{try{const u=new URL(storyUrl);return u.hostname==='tichvulam.wordpress.com'&&/nhat-pham-phu-nhan/i.test(u.pathname)}catch{return false}})();

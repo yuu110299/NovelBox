@@ -137,6 +137,44 @@ async def get_page(client, url):
         raise HTTPException(400,"Trang không phải HTML hợp lệ hoặc quá lớn.")
     return BeautifulSoup(r.text,"html.parser"),str(r.url)
 
+@app.post("/dualeo-diagnostics")
+async def dualeo_diagnostics(req: ReadRequest):
+    """Report only safe structural information; never expose source HTML."""
+    from urllib.parse import urlparse
+    u=urlparse(req.url.strip())
+    if u.scheme!="https" or not u.hostname or not (u.hostname=="dualeotruyenfull.net" or u.hostname.endswith(".dualeotruyenfull.net")):
+        raise HTTPException(400,"Chỉ hỗ trợ URL Dưa Leo Truyện Full.")
+    report={"source":"dualeotruyenfull.net","requested_url":req.url,"pages":[]}
+    headers={"User-Agent":"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36","Accept":"text/html,application/xhtml+xml","Accept-Language":"vi-VN,vi;q=0.9"}
+    async with httpx.AsyncClient(timeout=22,follow_redirects=False,headers=headers) as client:
+        async def inspect(url):
+            entry={"url":url}
+            try:
+                response=await client.get(url)
+                entry["http_status"]=response.status_code
+                entry["content_type"]=response.headers.get("content-type","")[:100]
+                entry["bytes"]=len(response.content)
+                if response.status_code!=200 or "html" not in entry["content_type"].lower():
+                    return entry
+                soup=BeautifulSoup(response.text[:3000000],"html.parser")
+                entry["html_title"]=soup.title.get_text(" ",strip=True)[:160] if soup.title else ""
+                entry["total_anchors"]=len(soup.select("a[href]"))
+                entry["chapter_like_anchors"]=len(soup.select("a[href*='chuong-']"))
+                entry["challenge_hint"]=bool(re.search(r"please wait while your request is being verified|checking your browser|just a moment|cf-chl|captcha",response.text,re.I))
+                entry["recognized_chapters"]=len(chapter_links(soup,str(response.url),u.path))
+                entry["pagination_links"]=len(page_links(soup,str(response.url),u.path))
+                entry["sample_chapter_paths"]=[urlparse(x["url"]).path for x in chapter_links(soup,str(response.url),u.path)[:3]]
+            except Exception as exc:
+                entry["error_type"]=type(exc).__name__
+            return entry
+        first=await inspect(req.url)
+        report["pages"].append(first)
+        if first.get("http_status")==200:
+            for number in (1,2):
+                page=req.url.rstrip("/")+"/chuong/page/"+str(number)+"/"
+                report["pages"].append(await inspect(page))
+    return report
+
 def chapter_links(soup,base,story_path):
     found={}
     host=(urlparse(base).hostname or "").lower()

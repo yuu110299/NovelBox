@@ -296,10 +296,10 @@ async function coverBytes(){
  if(navy&&!url)throw Error('NavyTeams chưa trả về URL ảnh bìa. Hãy thu thập lại thông tin truyện.');
  let result=null;
  const isTruyenfull=(()=>{try{return new URL(storyUrl).hostname==='truyenfull.live'}catch{return false}})();
- if(isTruyenfull&&url&&/^https:\/\/lh3\\.googleusercontent\\.com\/pw\//i.test(url)){
+ if(isTruyenfull&&url&&/^https:\/\/lh3\.googleusercontent\.com\/pw\//i.test(url)){
   // Only Truyenfull: its og:image may use a non-display =w0-h0-c size.
   // Attempt the on-page thumbnail first, then the original URL.
-  const photoBase=url.replace(/=w\\d+-h\\d+(?:-[a-z-]+)?(?=\\?|$)/i,'');
+  const photoBase=url.replace(/=w\d+-h\d+(?:-[a-z-]+)?(?=\?|$)/i,'');
   const variants=[photoBase+'=w215-h322-s-no',photoBase+'=s0',url];
   let lastError;
   for(const candidate of [...new Set(variants)]){

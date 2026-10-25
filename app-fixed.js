@@ -327,14 +327,30 @@ async function coverBytes(){
 async function chapterImages(){
  if(!$('includeChapterImages').checked)return [];
  const jobs=[];
+ const storyHost=(()=>{try{return new URL(storyMeta.story_url||$('url').value).hostname.toLowerCase()}catch{return ''}})();
+ const isWattpad=storyHost==='wattpad.com'||storyHost.endsWith('.wattpad.com');
+ const coverURL=String(storyMeta.cover||'');
+ const wattpadMetadataImage=url=>{
+  if(!isWattpad)return false;
+  try{
+   const asset=new URL(url);
+   const p=asset.pathname.toLowerCase();
+   if(/\/(?:useravatar|avatar|avatars|profile|profiles|cover|covers|bookcover|book-cover|storycover|story-cover)(?:\/|$)/i.test(p))return true;
+   if(coverURL){
+    const cover=new URL(coverURL);
+    if(asset.hostname===cover.hostname&&asset.pathname===cover.pathname)return true;
+   }
+  }catch{}
+  return false;
+ };
  for(let i=0;i<downloaded.length;i++)
-  for(const url of (downloaded[i].images||[]))jobs.push({chapter:i,url});
+  for(const url of (downloaded[i].images||[]))
+   if(!wattpadMetadataImage(url))jobs.push({chapter:i,url});
  const result=new Array(jobs.length);
  const status=$('status');
  const pause=ms=>new Promise(resolve=>setTimeout(resolve,ms));
  // Large Wattpad image sets need gentle, sequential requests to avoid throttling.
- const storyHost=(()=>{try{return new URL(storyMeta.story_url||$('url').value).hostname.toLowerCase()}catch{return ''}})();
- const slowMode=jobs.length>=80||storyHost.includes('wattpad.com');
+ const slowMode=jobs.length>=80||isWattpad;
  const concurrency=slowMode?2:Math.min(5,jobs.length);
  let cursor=0,done=0,successful=0;
  const workers=Array.from({length:concurrency},async()=>{

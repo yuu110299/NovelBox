@@ -387,7 +387,7 @@ async function coverBytes(){
    catch(error){lastError=error;console.warn('Truyenfull cover candidate failed',candidate,error.message)}
   }
   if(!result)result=await coverFromPublicRelays(url);
-  if(!result)throw new Error('Truyenfull không tải được ảnh bìa từ Googleusercontent hoặc dịch vụ ảnh trung gian. Có thể chọn ảnh tại mục Ảnh bìa thay thế. '+(lastError?.message||''));
+  if(!result)throw new Error('Truyenfull không tải được ảnh bìa từ Googleusercontent hoặc dịch vụ ảnh trung gian. '+(lastError?.message||''));
  }else result=await imageBytes(url,true);
  // Verified cover for Nhất phẩm phu nhân on tichvulam WordPress.
  // Only use this fallback for this story, never for other books on the blog.

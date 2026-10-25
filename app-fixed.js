@@ -315,6 +315,33 @@ async function imageBytes(url,coverMode=false,truyenfullCover=false){
  const data={bytes:new Uint8Array(await blob.arrayBuffer()),mime:blob.type,ext:blob.type==='image/png'?'png':'jpg'};
  imageCache.set(url,data);return data;
 }
+async function coverFromPublicRelays(url){
+ const u=new URL(url);
+ const root=u.origin+u.pathname.replace(/=w\d+-h\d+(?:-[a-z-]+)?$|=s\d+$/i,'');
+ const exact=root+'=w215-h322-s-no'+u.search;
+ const targets=[
+  'https://images.weserv.nl/?url='+encodeURIComponent(exact)+'&output=jpg',
+  'https://wsrv.nl/?url='+encodeURIComponent(exact)+'&output=jpg',
+  'https://imageproxy.ifunny.co/crop:x-20,resize:640x,quality:90x75/images/'+encodeURIComponent(exact)
+ ];
+ for(const target of targets){
+  try{
+   const response=await fetch(target,{mode:'cors',signal:AbortSignal.timeout(12000)});
+   if(!response.ok)continue;
+   const blob=await response.blob();
+   if(blob.size<100||blob.size>5000000||!/^image\/(jpeg|png|webp)$/.test(blob.type))continue;
+   let resultBlob=blob;
+   if(blob.type==='image/webp'){
+    const bmp=await createImageBitmap(blob);const canvas=document.createElement('canvas');
+    canvas.width=bmp.width;canvas.height=bmp.height;canvas.getContext('2d').drawImage(bmp,0,0);bmp.close();
+    resultBlob=await new Promise(resolve=>canvas.toBlob(resolve,'image/png'));
+   }
+   if(!resultBlob)continue;
+   return {bytes:new Uint8Array(await resultBlob.arrayBuffer()),mime:resultBlob.type,ext:resultBlob.type==='image/png'?'png':'jpg'};
+  }catch(error){console.debug('Public image relay failed',error)}
+ }
+ return null;
+}
 async function coverBytes(){
  const selected=$('manualCover')?.files?.[0];
  if(selected){
@@ -359,7 +386,8 @@ async function coverBytes(){
    try{result=await imageBytes(candidate,true,true);if(result){storyMeta.cover=candidate;break}}
    catch(error){lastError=error;console.warn('Truyenfull cover candidate failed',candidate,error.message)}
   }
-  if(!result)throw new Error('Truyenfull không tải được ảnh bìa sau khi thử các URL ảnh gốc: '+(lastError?.message||url));
+  if(!result)result=await coverFromPublicRelays(url);
+  if(!result)throw new Error('Truyenfull không tải được ảnh bìa từ Googleusercontent hoặc dịch vụ ảnh trung gian. Có thể chọn ảnh tại mục Ảnh bìa thay thế. '+(lastError?.message||''));
  }else result=await imageBytes(url,true);
  // Verified cover for Nhất phẩm phu nhân on tichvulam WordPress.
  // Only use this fallback for this story, never for other books on the blog.

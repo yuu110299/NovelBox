@@ -1361,7 +1361,7 @@ async def render_batch(req: BatchRequest):
 async def luotnovel_discover(url):
     from urllib.parse import parse_qs
     found={}
-    async with httpx.AsyncClient(timeout=25,follow_redirects=False,headers={"User-Agent":"Mozilla/5.0","Accept-Language":"vi-VN,vi;q=0.9"}) as client:
+    async with httpx.AsyncClient(timeout=12,follow_redirects=False,headers={"User-Agent":"Mozilla/5.0","Accept-Language":"vi-VN,vi;q=0.9"}) as client:
         soup,base=await get_page(client,url)
         title=(soup.select_one("meta[property='og:title']") or {}).get("content","") or (soup.h1.get_text(" ",strip=True) if soup.h1 else "")
         story_path=urlparse(base).path
@@ -1376,12 +1376,12 @@ async def luotnovel_discover(url):
                 found[link]={"title":label[:180] or "Chương "+str(len(found)+1),"url":link}
         collect(soup,base)
         pages=page_links(soup,base,story_path)
-        for link in pages[:30]:
+        for link in pages[:4]:
             try:
                 sub,_=await get_page(client,link)
                 collect(sub,link)
             except (HTTPException,httpx.HTTPError):pass
-    if len(found)<3:
+    if not found:
         # LuotNovel loads its table of contents asynchronously into #nt_listchapter.
         try:
             async with await _render_browser() as playwright:
@@ -1390,7 +1390,7 @@ async def luotnovel_discover(url):
                     page=await browser.new_page(locale="vi-VN")
                     await page.goto(url,wait_until="domcontentloaded",timeout=35000)
                     try:
-                        await page.locator("#nt_listchapter a[href]").first.wait_for(timeout=18000)
+                        await page.locator("#nt_listchapter a[href]").first.wait_for(timeout=5500)
                     except Exception:
                         pass
                     for _ in range(5):
@@ -1403,7 +1403,7 @@ async def luotnovel_discover(url):
                     await browser.close()
         except Exception:
             pass
-    if len(found)<3:
+    if not found:
         try:
             rendered=await _render_page(url)
             for item in rendered.get("links",[]):

@@ -972,18 +972,6 @@ async def image(req:ReadRequest):
     if not await public_image_host(u.hostname):raise HTTPException(400,"Máy chủ ảnh không an toàn hoặc không truy cập được.")
     headers={"User-Agent":"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/131.0.0.0 Safari/537.36","Referer":f"https://{u.hostname}/","Accept":"image/png,image/jpeg,image/webp,*/*"}
     candidates=[url]
-    # Truyenfull.live often serves book covers from Google Photos CDN.
-    # Try the same underlying image at different public size variants.
-    if u.hostname.endswith(".googleusercontent.com") and u.path.startswith("/pw/"):
-        from urllib.parse import unquote, quote
-        # Truyenfull uses a Google Photos link with a percent-encoded '=' and
-        # an authuser query. Normalize the image ID before trying public sizes.
-        decoded_path=unquote(u.path)
-        image_id=decoded_path.split("=",1)[0]
-        origin=f"https://{u.hostname}{image_id}"
-        candidates=[url,origin+"=s0",origin+"=w800-h1200",
-                    "https://wsrv.nl/?url="+quote(url,safe=""),
-                    "https://wsrv.nl/?url="+quote(origin+"=w800",safe="")]
     # A public image CDN can fetch the exact same NavyTeams avatar when Render
     # cannot resolve/reach navyteams.com. Never use this for arbitrary URLs.
     if u.hostname in ("navyteams.com","www.navyteams.com") and u.path.startswith("/storage/story_avatars/"):
@@ -994,13 +982,17 @@ async def image(req:ReadRequest):
     # Try WordPress's own image CDN if direct origin access fails on Render.
     if u.hostname=="tichvulam.wordpress.com" and u.path.startswith("/wp-content/uploads/"):
         from urllib.parse import quote
-        candidates=["https://i0.wp.com/"+u.hostname+u.path,"https://wsrv.nl/?url="+quote(url,safe=""),url]
-    async with httpx.AsyncClient(timeout=httpx.Timeout(5.0,connect=3.0),follow_redirects=True,max_redirects=4,trust_env=False) as client:
+        candidates.append("https://i0.wp.com/"+u.hostname+u.path)
+        candidates.append("https://wsrv.nl/?url="+quote(url,safe=""))
+    async with httpx.AsyncClient(timeout=22,follow_redirects=False,trust_env=False) as client:
         last_error=None
         for candidate in candidates:
-            for attempt in range(1):
+            for attempt in range(2):
                 try:
                     r=await client.get(candidate,headers=headers)
+                    if r.status_code in (429,500,502,503,504) and attempt==0:
+                        await asyncio.sleep(.7)
+                        continue
                     r.raise_for_status()
                     data=r.content
                     mime=""

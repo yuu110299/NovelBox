@@ -318,11 +318,11 @@ async function imageBytes(url,coverMode=false,truyenfullCover=false){
 async function coverFromPublicRelays(url){
  const u=new URL(url);
  const root=u.origin+u.pathname.replace(/=w\d+-h\d+(?:-[a-z-]+)?$|=s\d+$/i,'');
- const exact=root+'=w215-h322-s-no'+u.search;
+ const exact=u.hostname==='lh3.googleusercontent.com'?root+'=w215-h322-s-no'+u.search:url;
  const targets=[
   'https://images.weserv.nl/?url='+encodeURIComponent(exact)+'&output=jpg',
   'https://wsrv.nl/?url='+encodeURIComponent(exact)+'&output=jpg',
-  'https://imageproxy.ifunny.co/crop:x-20,resize:640x,quality:90x75/images/'+encodeURIComponent(exact)
+  'https://i0.wp.com/'+u.host+u.pathname+(u.search||'')
  ];
  for(const target of targets){
   try{
@@ -388,6 +388,12 @@ async function coverBytes(){
   }
   if(!result)result=await coverFromPublicRelays(url);
   if(!result)throw new Error('Truyenfull không tải được ảnh bìa từ Googleusercontent hoặc dịch vụ ảnh trung gian. '+(lastError?.message||''));
+ }else if(url&&(()=>{try{return new URL(url).hostname==='static.truyenfull.live'}catch{return false}})()){
+  try{result=await imageBytes(url,true)}catch(error){
+   console.warn('Truyenfull CDN direct/proxy failed; trying browser relays',error);
+   result=await coverFromPublicRelays(url);
+   if(!result)throw Error('Không tải được ảnh bìa Truyenfull sau khi thử nguồn và dịch vụ ảnh trung gian: '+error.message);
+  }
  }else result=await imageBytes(url,true);
  // Verified cover for Nhất phẩm phu nhân on tichvulam WordPress.
  // Only use this fallback for this story, never for other books on the blog.

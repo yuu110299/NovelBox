@@ -982,12 +982,11 @@ async def image(req:ReadRequest):
     # Try WordPress's own image CDN if direct origin access fails on Render.
     if u.hostname=="tichvulam.wordpress.com" and u.path.startswith("/wp-content/uploads/"):
         from urllib.parse import quote
-        candidates.append("https://i0.wp.com/"+u.hostname+u.path)
-        candidates.append("https://wsrv.nl/?url="+quote(url,safe=""))
-    async with httpx.AsyncClient(timeout=22,follow_redirects=False,trust_env=False) as client:
+        candidates=["https://i0.wp.com/"+u.hostname+u.path,"https://wsrv.nl/?url="+quote(url,safe=""),url]
+    async with httpx.AsyncClient(timeout=httpx.Timeout(9.0,connect=4.0),follow_redirects=True,max_redirects=4,trust_env=False) as client:
         last_error=None
         for candidate in candidates:
-            for attempt in range(2):
+            for attempt in range(1):
                 try:
                     r=await client.get(candidate,headers=headers)
                     if r.status_code in (429,500,502,503,504) and attempt==0:

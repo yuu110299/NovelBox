@@ -1091,6 +1091,11 @@ async def image(req:ReadRequest):
             "https://i0.wp.com/"+u.hostname+u.path,
             "https://wsrv.nl/?url="+quote(url,safe=""),
         ])
+    if (u.hostname or "").endswith(".wordpress.com") and "/wp-content/uploads/" in u.path:
+        blog=u.hostname.removesuffix(".wordpress.com")
+        uploads=u.path.split("/wp-content/uploads/",1)[1]
+        files_url="https://"+blog+".files.wordpress.com/"+uploads
+        candidates.extend([files_url,"https://i0.wp.com/"+blog+".files.wordpress.com/"+uploads,"https://i1.wp.com/"+u.hostname+u.path,"https://i2.wp.com/"+u.hostname+u.path,"https://wsrv.nl/?url="+__import__("urllib.parse",fromlist=["quote"]).quote(files_url,safe="")])
     if (u.hostname or "").endswith(".files.wordpress.com"):
         from urllib.parse import quote
         candidates.extend([
@@ -1118,7 +1123,9 @@ async def image(req:ReadRequest):
         for candidate in candidates:
             for attempt in range(1 if u.hostname=="lh3.googleusercontent.com" and u.path.startswith("/pw/") else 2):
                 try:
-                    r=await client.get(candidate,headers=headers)
+                    candidate_host=(urlparse(candidate).hostname or "").lower()
+                    request_headers=headers if candidate_host==u.hostname else {"User-Agent":headers["User-Agent"],"Accept":headers["Accept"]}
+                    r=await client.get(candidate,headers=request_headers)
                     if r.status_code in (429,500,502,503,504) and attempt==0 and u.hostname!="lh3.googleusercontent.com":
                         await asyncio.sleep(.7)
                         continue

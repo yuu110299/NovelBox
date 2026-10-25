@@ -411,12 +411,16 @@ def page_links(soup,base,story_path):
         for a in soup.select("a[href*='/chuong/page/']"):
             href=normalized_url(base,a.get("href",""))
             if href and urlparse(href).path.startswith(story_path.rstrip("/")+"/chuong/page/") and href not in result:result.append(href)
-        total_match=re.search(r"(\d+)\s*Ch\.\s*Chương",soup.get_text(" ",strip=True),re.I)
+        text=soup.get_text(" ",strip=True)
+        total_match=re.search(r"(\d+)\s*(?:Ch\.\s*)?Chương",text,re.I)
+        numbers=[int(m.group(1)) for a in soup.select("a[href*='/chuong/page/']")
+                 if (m:=re.search(r"/chuong/page/(\d+)",a.get("href","")))]
+        total_pages=max(numbers,default=1)
         if total_match:
-            count=min(int(total_match.group(1)),3000)
-            for n in range(1,min((count+19)//20+1,151)):
-                href=normalized_url(base,story_path.rstrip("/")+"/chuong/page/"+str(n)+"/")
-                if href and href not in result:result.append(href)
+            total_pages=max(total_pages,(min(int(total_match.group(1)),3000)+19)//20)
+        for n in range(2,min(total_pages,150)+1):
+            href=normalized_url(base,story_path.rstrip("/")+"/chuong/page/"+str(n)+"/")
+            if href and href not in result:result.append(href)
         return result[:150]
     for a in soup.select(".pagination a[href],.pagination-container a[href],a[href*='page='],a[href*='/trang-']"):
         href=normalized_url(base,a.get("href",""))
@@ -709,6 +713,11 @@ async def discover(req:ReadRequest):
     u=urlparse(req.url.strip())
     if u.scheme!="https" or not u.hostname or not allowed(u.hostname.lower()) or u.port not in (None,443):
         raise HTTPException(400,"Nguồn chưa được hỗ trợ hoặc URL không hợp lệ.")
+    if (u.hostname or "").lower().endswith("dualeotruyenfull.net"):
+        match=re.match(r"^(/doc-truyen/[^/]+)/chuong-\d+/?$",u.path,re.I)
+        if match:
+            req=ReadRequest(url=urlunparse((u.scheme,u.netloc,match.group(1)+"/","","","")),source=req.source)
+            u=urlparse(req.url)
     if (u.hostname or "").lower().endswith("wattpad.com"):
         async with httpx.AsyncClient(timeout=25,follow_redirects=False,headers={"User-Agent":"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36","Accept":"application/json","Accept-Language":"en-US,en;q=0.9"}) as client:
             info=await wattpad_story_metadata(client,req.url)
@@ -811,6 +820,9 @@ async def discover(req:ReadRequest):
                         return await listing(page)
                 for group in await asyncio.gather(*(limited_listing(p) for p in pending)):
                     for x in group:found[x["url"]]=x
+            if (urlparse(base).hostname or "").lower().endswith("dualeotruyenfull.net"):
+                found=dict(sorted(found.items(),key=lambda pair:int(re.search(r"/chuong-(\d+)",urlparse(pair[0]).path,re.I).group(1))
+                                  if re.search(r"/chuong-(\d+)",urlparse(pair[0]).path,re.I) else 10**9))
             def meta(selector):
                 t=soup.select_one(selector)
                 return (t.get("content") or "").strip() if t else ""

@@ -339,11 +339,29 @@ def wattpad_clean_text(value):
 def wattpad_story_text(html,base,include_images=False):
     """Read public Wattpad part HTML, including images outside paragraph tags."""
     soup=BeautifulSoup(html,'html.parser')
-    root=soup.body or soup
+    # Wattpad only: the full HTML page includes story cover, author avatar and
+    # recommendations. Restrict images to the actual chapter reading region.
+    root=next((soup.select_one(selector) for selector in (
+        '[data-testid="story-part-content"]','.story-part-content',
+        '#story-text-container','.panel-reading','.reading-content',
+        '.chapter-text','.chapter-content') if soup.select_one(selector)),None)
+    if root is None:
+        # A public story-text endpoint can return just a bare HTML body.
+        # Do not collect images from a full Wattpad webpage without a reader region.
+        root=soup.body or soup
+        full_page=bool(soup.select_one('header,nav,[data-testid="story-cover"],.story-cover,.author-info'))
+    else:
+        full_page=False
     paragraphs=[]
     images=[]
-    if include_images:
+    if include_images and not full_page:
         for img in root.select('img,source'):
+            if img.find_parent(['aside','nav','footer','header']):continue
+            metadata=' '.join(str(img.get(k,'')) for k in ('class','id','alt','data-testid'))
+            if re.search(r'avatar|author|profile|cover|banner|logo|advert|recommend|related|sidebar',metadata,re.I):continue
+            if any(re.search(r'avatar|author|profile|cover|banner|logo|advert|recommend|related|sidebar',
+                             ' '.join(str(p.get(k,'')) for k in ('class','id','data-testid')),re.I)
+                   for p in list(img.parents)[:5] if getattr(p,'attrs',None)):continue
             src=(img.get('data-src') or img.get('data-original') or img.get('data-url') or img.get('src') or img.get('srcset','').split(',')[0].strip().split(' ')[0])
             if src:
                 resolved=image_url(base,src)

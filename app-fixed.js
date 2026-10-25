@@ -192,9 +192,11 @@ async function loadChapters(){
   }
   const missing=downloaded.filter(x=>!x.content&&!x.images?.length).length;
   const reasons=[...new Set(downloaded.filter(x=>!x.content&&!x.images?.length).map(x=>x.error||'Không rõ nguyên nhân'))].slice(0,3);status.textContent='Hoàn thành '+(total-missing)+'/'+total+' chương.'+(missing?' Lỗi: '+reasons.join(' · ')+'. Bấm Tải nội dung để thử lại.':' Sẵn sàng xuất file.');
+  const exportNow=$('exportAfterChapters');if(exportNow){exportNow.style.display=missing?'none':'inline-block';exportNow.textContent='Tạo file đã chọn ↓';}
  }finally{activeDownload=false;btn.disabled=false}
 }
 $('fetchchapters').onclick=loadChapters;
+$('exportAfterChapters')?.addEventListener('click',()=>{$('download').click()});
 const escapeXml=s=>s.replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 function normalizeEscapedNewlines(text){
  let value=String(text??'');

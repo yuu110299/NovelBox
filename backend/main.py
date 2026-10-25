@@ -1273,8 +1273,48 @@ async def _render_page(url):
     except Exception as exc:
         raise HTTPException(502, "Playwright không thể đọc trang: " + str(exc)[:250]) from exc
 
+def _gv_story_from_props(html_text):
+    import html as html_lib
+    import json as json_lib
+    from bs4 import BeautifulSoup
+    soup = BeautifulSoup(html_text, "html.parser")
+    island = soup.select_one('astro-island[component-url*="StoryDetailShell"][props]')
+    if not island:
+        return None
+    try:
+        props = json_lib.loads(html_lib.unescape(island.get("props", "")))
+        def unwrap(value):
+            if isinstance(value, list) and len(value) == 2 and isinstance(value[0], int):
+                return unwrap(value[1])
+            if isinstance(value, dict):
+                return {k: unwrap(v) for k, v in value.items()}
+            if isinstance(value, list):
+                return [unwrap(v) for v in value]
+            return value
+        return unwrap(props.get("initialStory"))
+    except (ValueError, TypeError):
+        return None
+
 @app.post("/render-discover")
 async def render_discover(req: ReadRequest):
+    from urllib.parse import quote
+    if (urlparse(req.url).hostname or "").endswith("giatocvuongtai.com") and urlparse(req.url).path.startswith("/stories/"):
+        import httpx
+        try:
+            async with httpx.AsyncClient(follow_redirects=True, timeout=25) as client:
+                response = await client.get(req.url, headers={"User-Agent": "Mozilla/5.0", "Accept": "text/html"})
+                response.raise_for_status()
+            story = _gv_story_from_props(response.text)
+            if story and story.get("id"):
+                chapters = []
+                for item in sorted(story.get("chapters") or [], key=lambda x: x.get("order_number", 0)):
+                    if not item.get("id") or not item.get("is_published", True) or item.get("is_password_protected"):
+                        continue
+                    link = "https://giatocvuongtai.com/reader/?storyId=" + quote(str(story["id"])) + "&chapter=" + quote(str(item["id"]))
+                    chapters.append({"title": item.get("title") or "Chương", "url": link})
+                return {"title": story.get("title", ""), "author": (story.get("author") or {}).get("name", ""), "chapters": chapters, "count": len(chapters), "cover": story.get("cover_url", ""), "description": story.get("summary", "")}
+        except Exception:
+            pass
     data = await _render_page(req.url)
     story_id = __import__("urllib.parse", fromlist=["parse_qs"]).parse_qs(urlparse(req.url).query).get("storyId", [None])[0]
     seen = set()

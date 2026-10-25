@@ -336,43 +336,51 @@ def wattpad_clean_text(value):
     value=re.sub(r"[ \t]*\n[ \t]*","\n",value)
     return re.sub(r"\n{3,}","\n\n",value).strip()
 
+def wattpad_is_chapter_illustration(url):
+    """Wattpad: metadata pictures must never be imported as chapter media."""
+    u=urlparse(str(url or ""))
+    path=u.path.lower()
+    if re.search(r"/(?:useravatar|avatar|avatars|profile|profiles|cover|covers|bookcover|book-cover|storycover|story-cover)(?:/|$)",path):
+        return False
+    return True
+
+
 def wattpad_story_text(html,base,include_images=False):
-    """Read public Wattpad part HTML, including images outside paragraph tags."""
+    """Read Wattpad part body, never the author's profile or book cover."""
     soup=BeautifulSoup(html,'html.parser')
-    # Wattpad only: the full HTML page includes story cover, author avatar and
-    # recommendations. Restrict images to the actual chapter reading region.
-    root=next((soup.select_one(selector) for selector in (
-        '[data-testid="story-part-content"]','.story-part-content',
-        '#story-text-container','.panel-reading','.reading-content',
-        '.chapter-text','.chapter-content') if soup.select_one(selector)),None)
+    selectors=(
+        '[data-testid="story-part-content"]', '.story-part-content',
+        '#story-text-container', '[data-testid="part-content"]',
+        '.panel-reading .reading-content', '.reading-content .story-text',
+        '.chapter-text', '.chapter-content')
+    root=next((node for selector in selectors if (node:=soup.select_one(selector)) is not None),None)
     if root is None:
-        # A public story-text endpoint can return just a bare HTML body.
-        # Do not collect images from a full Wattpad webpage without a reader region.
+        # Wattpad text_url and storytext ZIP return a small standalone HTML body.
+        # A complete webpage, however, includes metadata and recommendations.
+        full_page=bool(soup.select_one('header,nav,footer,[data-testid="story-cover"],.story-cover,.author-info,meta[property="og:type"],script[src]'))
+        if full_page:
+            return "",[]
         root=soup.body or soup
-        full_page=bool(soup.select_one('header,nav,[data-testid="story-cover"],.story-cover,.author-info'))
-    else:
-        full_page=False
     paragraphs=[]
     images=[]
-    if include_images and not full_page:
-        for img in root.select('img,source'):
-            if img.find_parent(['aside','nav','footer','header']):continue
-            metadata=' '.join(str(img.get(k,'')) for k in ('class','id','alt','data-testid'))
-            if re.search(r'avatar|author|profile|cover|banner|logo|advert|recommend|related|sidebar',metadata,re.I):continue
-            if any(re.search(r'avatar|author|profile|cover|banner|logo|advert|recommend|related|sidebar',
-                             ' '.join(str(p.get(k,'')) for k in ('class','id','data-testid')),re.I)
-                   for p in list(img.parents)[:5] if getattr(p,'attrs',None)):continue
-            src=(img.get('data-src') or img.get('data-original') or img.get('data-url') or img.get('src') or img.get('srcset','').split(',')[0].strip().split(' ')[0])
-            if src:
-                resolved=image_url(base,src)
-                if resolved and resolved not in images:images.append(resolved)
+    # Use genuine story paragraphs only (same structure as WattpadDownloader).
     for p in root.find_all('p'):
         if p.find_parent(['aside','nav','footer','header','script','style']):continue
+        metadata=' '.join(str(p.get(k,'')) for k in ('class','id','data-testid'))
+        if re.search(r'avatar|author|profile|cover|banner|logo|advert|recommend|related|sidebar',metadata,re.I):continue
+        if include_images:
+            for img in p.select('img,source'):
+                if img.find_parent(['aside','nav','footer','header']):continue
+                meta=' '.join(str(img.get(k,'')) for k in ('class','id','alt','data-testid'))
+                if re.search(r'avatar|author|profile|cover|banner|logo|advert|recommend|related|sidebar',meta,re.I):continue
+                src=(img.get('data-src') or img.get('data-original') or img.get('data-url') or img.get('src') or img.get('srcset','').split(',')[0].strip().split(' ')[0])
+                if src:
+                    resolved=image_url(base,src)
+                    if resolved and wattpad_is_chapter_illustration(resolved) and resolved not in images:images.append(resolved)
         for bad in p.select('script,style,button,nav,aside'):bad.decompose()
         for br in p.find_all('br'):br.replace_with('\n')
         value=p.get_text('',strip=False).replace('\xa0',' ').strip()
         value=re.sub(r'[ \t]+',' ',value)
-        value=value.replace('\r\n','\n').replace('\n','\n').replace('\r','\n')
         value=wattpad_clean_text(value)
         if value:paragraphs.append(value)
     return wattpad_clean_text('\n\n'.join(paragraphs))[:300000],images[:1000]
@@ -972,7 +980,10 @@ async def batch(req:BatchRequest):
                         extra_text,extra_images=wattpad_story_text(str(soup),base,req.include_images)
                         if not content:content=extra_text
                         content=wattpad_clean_text(content)
-                        images=list(dict.fromkeys([*images,*extra_images]))
+                        # Wattpad reader HTML can contain author/cover elements even
+                        # inside broad layout nodes. Only trust paragraph images
+                        # extracted by the Wattpad-specific body parser.
+                        images=extra_images if req.include_images else []
                     if is_wattpad and not content and not images:
                         return {"title":item["title"],"url":item["url"],"content":"","images":[],"error":"Wattpad không cung cấp nội dung chương qua HTML hoặc bản ZIP công khai; chương có thể bị khóa hoặc nguồn từ chối máy chủ."}
                     if not content and (urlparse(base).hostname or "").lower().endswith("navyteams.com"):
@@ -1679,7 +1690,10 @@ async def batch(req:BatchRequest):
                         extra_text,extra_images=wattpad_story_text(str(soup),base,req.include_images)
                         if not content:content=extra_text
                         content=wattpad_clean_text(content)
-                        images=list(dict.fromkeys([*images,*extra_images]))
+                        # Wattpad reader HTML can contain author/cover elements even
+                        # inside broad layout nodes. Only trust paragraph images
+                        # extracted by the Wattpad-specific body parser.
+                        images=extra_images if req.include_images else []
                     if is_wattpad and not content and not images:
                         return {"title":item["title"],"url":item["url"],"content":"","images":[],"error":"Wattpad không cung cấp nội dung chương qua HTML hoặc bản ZIP công khai; chương có thể bị khóa hoặc nguồn từ chối máy chủ."}
                     if not content and (urlparse(base).hostname or "").lower().endswith("navyteams.com"):

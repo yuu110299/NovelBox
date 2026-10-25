@@ -109,6 +109,7 @@ async function loadStory(){
   const layout=document.createElement("div");layout.className="story-meta-layout";
   const details=document.createElement("div");details.className="story-meta-details";
   displayedCoverBytes=null;
+  coverDataUrl=null;
   if(storyMeta.cover){const img=document.createElement("img");const coverUrl=storyMeta.cover;img.alt="Ảnh bìa truyện";img.className="story-meta-cover";img.referrerPolicy="no-referrer";img.loading="lazy";
   // Truyenfull: try a CORS-enabled load so the already visible cover can be
   // copied into the exported file via canvas without a second network request.
@@ -280,6 +281,7 @@ function bookParagraphs(d){
 const get=()=>({title:cleanSourceMarks($('title').value.trim()||'Truyện mẫu'),author:cleanSourceMarks($('author').value.trim()),body:[storyMeta.categories?.length?'Thể loại: '+storyMeta.categories.join(', '):'',storyMeta.description?'Giới Thiệu\n'+storyMeta.description:'',$('content').value].filter(Boolean).join('\n\n')});
 const imageCache=new Map();
 let displayedCoverBytes=null;
+let coverDataUrl=null;
 async function rememberDisplayedCover(img,url){
  try{
   if(!img.naturalWidth||!img.naturalHeight)return;
@@ -288,7 +290,7 @@ async function rememberDisplayedCover(img,url){
   const blob=await new Promise(resolve=>canvas.toBlob(resolve,'image/png'));
   if(!blob||!blob.size||blob.size>5000000)return;
   const data={bytes:new Uint8Array(await blob.arrayBuffer()),mime:'image/png',ext:'png'};
-  if(storyMeta.cover===url){displayedCoverBytes=data;imageCache.set(url,data)}
+  if(storyMeta.cover===url){displayedCoverBytes=data;imageCache.set(url,data);coverDataUrl=canvas.toDataURL('image/png')}
  }catch(e){console.debug('Ảnh hiển thị không cho phép đọc pixel, sẽ dùng ảnh đã tải qua proxy',e)}
 }
 
@@ -326,6 +328,12 @@ async function coverBytes(){
   return {bytes:new Uint8Array(await blob.arrayBuffer()),mime:blob.type,ext:blob.type==='image/png'?'png':'jpg'};
  }
  const url=storyMeta.cover;
+ // Prefer the Base64 snapshot made as soon as the metadata cover loaded.
+ if(coverDataUrl){
+  const response=await fetch(coverDataUrl);
+  const blob=await response.blob();
+  return {bytes:new Uint8Array(await blob.arrayBuffer()),mime:'image/png',ext:'png'};
+ }
  const storyUrl=storyMeta.story_url||$('url').value.trim();
  const navy=(()=>{try{return new URL(storyUrl).hostname.endsWith('navyteams.com')}catch{return false}})();
  // Reuse the exact image already decoded/displayed in the story information panel.

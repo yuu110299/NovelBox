@@ -260,7 +260,7 @@ async function rememberDisplayedCover(img,url){
  }catch(e){console.debug('Ảnh hiển thị không cho phép đọc pixel, sẽ dùng ảnh đã tải qua proxy',e)}
 }
 
-async function imageBytes(url,coverMode=false){
+async function imageBytes(url,coverMode=false,truyenfullCover=false){
  if(!url)return null;
  if(imageCache.has(url))return imageCache.get(url);
  const fetchBlob=async(proxy,timeout)=>{
@@ -273,7 +273,7 @@ async function imageBytes(url,coverMode=false){
  let blob=null,lastImageError='';
  for(let attempt=0;attempt<2&&!blob;attempt++){
   const wordpressCover=coverMode&&/^https:\/\/tichvulam\.wordpress\.com\/wp-content\/uploads\//i.test(url);
-  try{blob=await fetchBlob(wordpressCover?attempt===0:attempt!==0,wordpressCover?(attempt===0?45000:6000):(attempt===0?4500:coverMode?45000:14000))}
+  try{blob=await fetchBlob(wordpressCover?attempt===0:attempt!==0,truyenfullCover?(attempt===0?3500:14000):wordpressCover?(attempt===0?45000:6000):(attempt===0?4500:coverMode?45000:14000))}
   catch(e){lastImageError=e.message||String(e);console.warn('Thử tải ảnh '+(attempt+1)+'/2',url,lastImageError)}
  }
  if(!blob){if(coverMode)throw Error('Ảnh bìa '+url+' — '+(lastImageError||'Không nhận được dữ liệu ảnh'));return null;}
@@ -303,7 +303,7 @@ async function coverBytes(){
   const variants=[photoBase+'=w215-h322-s-no',photoBase+'=s0',url];
   let lastError;
   for(const candidate of [...new Set(variants)]){
-   try{result=await imageBytes(candidate,true);if(result){storyMeta.cover=candidate;break}}
+   try{result=await imageBytes(candidate,true,true);if(result){storyMeta.cover=candidate;break}}
    catch(error){lastError=error;console.warn('Truyenfull cover candidate failed',candidate,error.message)}
   }
   if(!result)throw new Error('Truyenfull không tải được ảnh bìa sau khi thử các URL ảnh gốc: '+(lastError?.message||url));

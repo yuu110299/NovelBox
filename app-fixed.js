@@ -265,18 +265,18 @@ async function imageBytes(url,coverMode=false){
  if(imageCache.has(url))return imageCache.get(url);
  const fetchBlob=async(proxy,timeout)=>{
   const response=await fetch(proxy?API+'/image':url,proxy?{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({url}),signal:AbortSignal.timeout(timeout)}:{mode:'cors',signal:AbortSignal.timeout(timeout)});
-  if(!response.ok)throw Error('HTTP '+response.status);
+  if(!response.ok){let detail='';try{const data=await response.json();detail=data.detail||''}catch{}throw Error('HTTP '+response.status+(detail?' — '+detail:''))}
   const blob=await response.blob();
   if(blob.size>5000000||!/^image\/(png|jpeg|webp)$/.test(blob.type))throw Error('Ảnh không hợp lệ hoặc quá 5MB');
   return blob;
  };
- let blob=null;
+ let blob=null,lastImageError='';
  for(let attempt=0;attempt<2&&!blob;attempt++){
   const wordpressCover=coverMode&&/^https:\/\/tichvulam\.wordpress\.com\/wp-content\/uploads\//i.test(url);
   try{blob=await fetchBlob(coverMode?true:attempt!==0,coverMode?35000:(attempt===0?4500:14000))}
-  catch(e){console.warn('Thử tải ảnh '+(attempt+1)+'/2',url,e.message)}
+  catch(e){lastImageError=e.message||String(e);console.warn('Thử tải ảnh '+(attempt+1)+'/2',url,lastImageError)}
  }
- if(!blob)return null;
+ if(!blob){if(coverMode)throw Error('Ảnh bìa '+url+' — '+(lastImageError||'Không nhận được dữ liệu ảnh'));return null;}
  if(blob.type==='image/webp'){try{const bmp=await createImageBitmap(blob),canvas=document.createElement('canvas');canvas.width=bmp.width;canvas.height=bmp.height;canvas.getContext('2d').drawImage(bmp,0,0);blob=await new Promise(resolve=>canvas.toBlob(resolve,'image/png'));bmp.close();if(!blob)return null}catch{return null}}
  const data={bytes:new Uint8Array(await blob.arrayBuffer()),mime:blob.type,ext:blob.type==='image/png'?'png':'jpg'};
  imageCache.set(url,data);return data;
@@ -308,7 +308,7 @@ async function coverBytes(){
   const verified='https://navyteams.com/storage/story_avatars/hJfMZ5rG6r5MCNqr73ryMC3kcqtludEyz6qG0s3j.png';
   if(url!==verified){result=await imageBytes(verified);if(result)storyMeta.cover=verified}
  }
- if(url&&!result)throw Error('Không tải được dữ liệu ảnh bìa từ URL nguồn. Vui lòng thử lại sau; NovelBox không yêu cầu chọn ảnh từ máy.');
+ if(url&&!result)throw Error('Không tải được ảnh bìa: '+url);
  return result;
 }
 async function chapterImages(){

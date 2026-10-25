@@ -1014,6 +1014,15 @@ async def image(req:ReadRequest):
         from urllib.parse import quote
         candidates.append("https://i0.wp.com/"+u.hostname+u.path)
         candidates.append("https://wsrv.nl/?url="+quote(url,safe=""))
+    # Truyenfull cover photos are hosted by Google Photos. Render can fail to
+    # reach lh3.googleusercontent.com directly; try a public image relay.
+    # Restricted to this Google Photos path, not other websites or sources.
+    if u.hostname=="lh3.googleusercontent.com" and u.path.startswith("/pw/"):
+        from urllib.parse import quote
+        photo_root=re.sub(r"=w\\d+-h\\d+(?:-[a-z-]+)?$|=s\\d+$","",url)
+        for photo_url in (photo_root+"=w215-h322-s-no",photo_root+"=s800"):
+            if photo_url not in candidates:candidates.append(photo_url)
+            candidates.append("https://wsrv.nl/?url="+quote(photo_url,safe=""))
     async with httpx.AsyncClient(timeout=22,follow_redirects=False,trust_env=False) as client:
         last_error=None
         for candidate in candidates:

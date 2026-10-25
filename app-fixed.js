@@ -314,6 +314,17 @@ async function imageBytes(url,coverMode=false,truyenfullCover=false){
  imageCache.set(url,data);return data;
 }
 async function coverBytes(){
+ const selected=$('manualCover')?.files?.[0];
+ if(selected){
+  if(!/^image\/(jpeg|png|webp)$/.test(selected.type)||selected.size>5000000)throw Error('Ảnh bìa tải lên phải là JPG/PNG/WebP và không quá 5MB.');
+  const blob=selected.type==='image/webp'?await (async()=>{
+   const bitmap=await createImageBitmap(selected);
+   const canvas=document.createElement('canvas');canvas.width=bitmap.width;canvas.height=bitmap.height;
+   canvas.getContext('2d').drawImage(bitmap,0,0);bitmap.close();
+   return await new Promise(resolve=>canvas.toBlob(resolve,'image/png'));
+  })():selected;
+  return {bytes:new Uint8Array(await blob.arrayBuffer()),mime:blob.type,ext:blob.type==='image/png'?'png':'jpg'};
+ }
  const url=storyMeta.cover;
  const storyUrl=storyMeta.story_url||$('url').value.trim();
  const navy=(()=>{try{return new URL(storyUrl).hostname.endsWith('navyteams.com')}catch{return false}})();

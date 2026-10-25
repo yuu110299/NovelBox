@@ -14,7 +14,7 @@ from pydantic import BaseModel
 app = FastAPI(title="Reedtt Reader API")
 app.add_middleware(CORSMiddleware, allow_origins=["https://yuu110299.github.io", "https://ginginji1102.github.io", "https://truyen-reader-demo.vercel.app"], allow_origin_regex=r"https://[a-z0-9-]+\.onrender\.com", allow_methods=["GET","POST"], allow_headers=["*"])
 
-ALLOWED = ("truyenfull.live", "wattpad.com", "wordpress.com", "navyteams.com", "inkitt.com", "giatocvuongtai.com", "luotnovel1.site")
+ALLOWED = ("truyenfull.live", "wattpad.com", "wordpress.com", "navyteams.com", "inkitt.com", "giatocvuongtai.com", "luotnovel1.site", "dualeotruyenfull.net")
 SELECTORS = ("#chapter-content", "#chapterContent", "#chapter-content-body", ".chapter-reading", ".chapter-body", ".chapter-text", ".reading-content", ".entry-content", ".chapter-content", ".reading-content", ".entry-content", ".chapter-c", "article", "[itemprop=articleBody]")
 SOURCE_HOSTS = {
     "wattpad.com": "wattpad",
@@ -24,6 +24,7 @@ SOURCE_HOSTS = {
     "giatocvuongtai.com": "giatocvuongtai",
     "luotnovel1.site": "luotnovel",
     "inkitt.com": "inkitt",
+    "dualeotruyenfull.net": "dualeo",
 }
 
 def source_for_url(url: str) -> str:
@@ -140,6 +141,19 @@ def chapter_links(soup,base,story_path):
     found={}
     host=(urlparse(base).hostname or "").lower()
     selectors=".list-chapter a[href],#list-chapter a[href],.chapter-list a[href],.list-chapters a[href],ul.list-chapter a[href],#chaptersList a[href],a[href*='chuong-'],a[href*='chapter-']"
+    if host.endswith("dualeotruyenfull.net"):
+        prefix=story_path.rstrip("/")+"/chuong-"
+        for a in soup.select("a[href]"):
+            href=normalized_url(base,a.get("href",""))
+            if not href or urlparse(href).hostname!=host:continue
+            path=urlparse(href).path.rstrip("/")
+            if not re.fullmatch(re.escape(prefix)+r"\d+",path,re.I):continue
+            if href not in found:
+                title=a.get_text(" ",strip=True)
+                match=re.search(r"(Chương\s*\d+\s*[:.\-]?\s*[^\n]*)",title,re.I)
+                title=(match.group(1) if match else "Chương "+path.rsplit("-",1)[-1]).strip()
+                found[href]={"title":title[:180],"url":href}
+        return sorted(found.values(),key=lambda item:int(re.search(r"/chuong-(\d+)",item["url"]).group(1)))
     if host.endswith("navyteams.com"):
         # Read chapter entries by their HTML container, never by chapter-name text.
         # Keep DOM order and include extras with arbitrary names.
@@ -393,6 +407,17 @@ def wattpad_story_text(html,base,include_images=False):
 
 def page_links(soup,base,story_path):
     result=[]
+    if (urlparse(base).hostname or "").endswith("dualeotruyenfull.net"):
+        for a in soup.select("a[href*='/chuong/page/']"):
+            href=normalized_url(base,a.get("href",""))
+            if href and urlparse(href).path.startswith(story_path.rstrip("/")+"/chuong/page/") and href not in result:result.append(href)
+        total_match=re.search(r"(\d+)\s*Ch\.\s*Chương",soup.get_text(" ",strip=True),re.I)
+        if total_match:
+            count=min(int(total_match.group(1)),3000)
+            for n in range(1,min((count+19)//20+1,151)):
+                href=normalized_url(base,story_path.rstrip("/")+"/chuong/page/"+str(n)+"/")
+                if href and href not in result:result.append(href)
+        return result[:150]
     for a in soup.select(".pagination a[href],.pagination-container a[href],a[href*='page='],a[href*='/trang-']"):
         href=normalized_url(base,a.get("href",""))
         if href and urlparse(href).path.rstrip("/").startswith(story_path.rstrip("/")) and href not in result:result.append(href)
@@ -460,6 +485,8 @@ def chapter_body(soup, source_url=''):
     host=(urlparse(source_url).hostname or '').lower()
     special=host.endswith(('wattpad.com','inkitt.com'))
     preferred=(('.story-page-text','#story-text-container') if host.endswith('inkitt.com') else ())+('[data-testid=story-part-content]','.story-part-content','.panel-reading','.reading-content','.chapter-text','.chapter-content')
+    if host.endswith("dualeotruyenfull.net"):
+        preferred=(".reading-content",".chapter-content","#chapter-content",".entry-content",".reader-content",".chapter-body","article .entry-content","article")
     if host.endswith("luotnovel1.site"):
         preferred=("#chapter-content","#chapterContent",".chapter-content",".chapter-body",".reading-content",".read-content",".chapter-text",".entry-content",".content-chapter",".novel-content","article", "[class*='chapter-content']")
     if host.endswith("truyenfull.live"):

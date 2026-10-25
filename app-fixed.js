@@ -346,7 +346,7 @@ async function chapterImages(){
 function save(blob,name){const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),10000)}
 $('check').onclick=loadStory;
 $('download').onclick=async()=>{const d=get();const status=$('status');const exportButton=$('download');if(exportButton.disabled)return;exportButton.disabled=true;status.textContent='Đang chuẩn bị tải file...';try{if(!d.body.trim()&&!downloaded.some(ch=>(ch.images||[]).length))throw Error('Chưa có nội dung hoặc ảnh chương để xuất.');const fmt=document.querySelector('input[name="format"]:checked').value;const name=(d.title.replace(/[^\p{L}\p{N} _-]/gu,'').slice(0,55)||'truyen')+'.'+fmt;const [cover,inlineImages]=await Promise.all([coverBytes(),chapterImages()]);if(storyMeta.cover&&!cover)throw Error('Không tải được ảnh bìa truyện; chưa xuất file thiếu ảnh bìa. Hãy thử lại hoặc kiểm tra máy chủ ảnh.');status.textContent='Đã tải '+inlineImages.length+' ảnh. Đang đóng gói '+fmt.toUpperCase()+'...';if(downloaded.some(ch=>ch.images?.length)&&!inlineImages.length)console.warn('Không tải được ảnh trong chương; vẫn xuất văn bản truyện.');
-if(fmt==='docx'){
+if(fmt==='docx'||fmt==='pdf'){
  if(!window.docx)throw Error('Không tải được thư viện Word.');
  const isVolume=text=>/^(?:quyển|quyen|tập|tap|phần|part)\s*(?:\d+|[ivxlcdm]+)\b/i.test((text||'').trim());
  const para=(text,kind='normal',extra={})=>new docx.Paragraph({text:cleanSourceMarks(text),style:kind==='title'||kind==='volume'?'Heading1':kind==='heading'?'Heading2':'Normal',...(kind==='title'||kind==='volume'?{alignment:docx.AlignmentType.CENTER}:{}),...extra});
@@ -377,7 +377,18 @@ if(fmt==='docx'){
   ]},
   sections:[{properties:{page:{size:{width:11906,height:16838},margin:{top:720,right:720,bottom:720,left:720,header:360,footer:360}}},children:paragraphs}]
  });
- status.textContent='Đang nén và tạo file Word, vui lòng giữ trang mở...';save(await docx.Packer.toBlob(doc),name)
+ status.textContent='Đang nén và tạo file Word, vui lòng giữ trang mở...';
+ const wordBlob=await docx.Packer.toBlob(doc);
+ if(fmt==='docx')save(wordBlob,name);
+ else{
+  status.textContent='Đang chuyển Word sang PDF...';
+  const bytes=new Uint8Array(await wordBlob.arrayBuffer());
+  let binary='';for(let i=0;i<bytes.length;i+=8192)binary+=String.fromCharCode(...bytes.subarray(i,i+8192));
+  const response=await fetch(API+'/convert-docx-pdf',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({docx_base64:btoa(binary)})});
+  if(!response.ok){let msg='HTTP '+response.status;try{const err=await response.json();msg=err.detail||msg}catch{}throw Error('Không chuyển được PDF: '+msg)}
+  const pdfBlob=await response.blob();if(!pdfBlob.size)throw Error('Máy chủ trả về PDF trống.');
+  save(pdfBlob,name);
+ }
 }
 else if(fmt==='epub'){if(!window.JSZip)throw Error('Không tải được thư viện EPUB.');const zip=new JSZip();zip.file('mimetype','application/epub+zip',{compression:'STORE'});zip.file('META-INF/container.xml','<?xml version="1.0" encoding="UTF-8"?><container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container"><rootfiles><rootfile full-path="OEBPS/content.opf" media-type="application/oebps-package+xml"/></rootfiles></container>');if(cover){zip.file('OEBPS/cover.'+cover.ext,cover.bytes)}inlineImages.forEach((im,i)=>zip.file('OEBPS/image'+i+'.'+im.ext,im.bytes));const paragraphs=bookParagraphs(d);
 const chapterHtml=downloaded.length?downloaded.map((ch,ci)=>'<h2>'+escapeXml(ch.title)+'<\/h2>'+sourceParagraphs(ch.content||'').map(p=>'<p>'+escapeXml(p)+'<\/p>').join('')+inlineImages.map((im,i)=>({im,i})).filter(x=>x.im.chapter===ci).map(x=>'<p><img src="image'+x.i+'.'+x.im.ext+'" alt="Minh họa chương" style="max-width:95%;height:auto"/><\/p>').join('')).join(''):paragraphs.map(p=>p.heading?'<h2>'+escapeXml(p.text)+'<\/h2>':'<p>'+escapeXml(p.text)+'<\/p>').join('');

@@ -972,6 +972,16 @@ async def image(req:ReadRequest):
     if not await public_image_host(u.hostname):raise HTTPException(400,"Máy chủ ảnh không an toàn hoặc không truy cập được.")
     headers={"User-Agent":"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/131.0.0.0 Safari/537.36","Referer":f"https://{u.hostname}/","Accept":"image/png,image/jpeg,image/webp,*/*"}
     candidates=[url]
+    # Truyenfull.live often serves book covers from Google Photos CDN.
+    # Try the same underlying image at different public size variants.
+    if u.hostname.endswith(".googleusercontent.com") and u.path.startswith("/pw/"):
+        from urllib.parse import unquote
+        original_path=unquote(u.path)
+        base_path=re.sub(r"=(?:w\\d+|h\\d+|s\\d+|no|c|k)(?:-[a-z0-9]+)*$", "", original_path, flags=re.I)
+        if base_path!=original_path:
+            candidates=[f"https://{u.hostname}{base_path}=s0",f"https://{u.hostname}{base_path}=w800",f"https://{u.hostname}{original_path}",url]
+        else:
+            candidates=[f"https://{u.hostname}{original_path}=s0",url]
     # A public image CDN can fetch the exact same NavyTeams avatar when Render
     # cannot resolve/reach navyteams.com. Never use this for arbitrary URLs.
     if u.hostname in ("navyteams.com","www.navyteams.com") and u.path.startswith("/storage/story_avatars/"):

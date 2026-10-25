@@ -84,7 +84,7 @@ async function loadStory(){
  try{
   let data;
   if(u.hostname==='giatocvuongtai.com'||u.hostname.endsWith('.giatocvuongtai.com')){
-   status.textContent='Đang mở trang bằng Playwright trên Render...';
+   status.textContent='Đang đọc dữ liệu truyện và danh sách chương từ trang nguồn...';
    try{data=await api('/render-discover',{url:u.href,source:'auto'})}
    catch(e){
     if(e instanceof TypeError||/Failed to fetch|NetworkError|Load failed/i.test(e.message||''))throw Error('Trình duyệt không được phép đọc trực tiếp nguồn này (có thể do CORS). Cần tiện ích trình duyệt có quyền truy cập trang nguồn. Không thể giải quyết bằng Render.');

@@ -981,8 +981,8 @@ async def image(req:ReadRequest):
         decoded_path=unquote(u.path)
         image_id=decoded_path.split("=",1)[0]
         origin=f"https://{u.hostname}{image_id}"
-        candidates=[origin+"=s0",origin+"=w800-h1200",origin+"=w400",
-                    f"https://{u.hostname}{decoded_path}",url,
+        candidates=[url,origin+"=s0",origin+"=w800-h1200",
+                    "https://wsrv.nl/?url="+quote(url,safe=""),
                     "https://wsrv.nl/?url="+quote(origin+"=w800",safe="")]
     # A public image CDN can fetch the exact same NavyTeams avatar when Render
     # cannot resolve/reach navyteams.com. Never use this for arbitrary URLs.
@@ -995,15 +995,12 @@ async def image(req:ReadRequest):
     if u.hostname=="tichvulam.wordpress.com" and u.path.startswith("/wp-content/uploads/"):
         from urllib.parse import quote
         candidates=["https://i0.wp.com/"+u.hostname+u.path,"https://wsrv.nl/?url="+quote(url,safe=""),url]
-    async with httpx.AsyncClient(timeout=httpx.Timeout(9.0,connect=4.0),follow_redirects=True,max_redirects=4,trust_env=False) as client:
+    async with httpx.AsyncClient(timeout=httpx.Timeout(5.0,connect=3.0),follow_redirects=True,max_redirects=4,trust_env=False) as client:
         last_error=None
         for candidate in candidates:
             for attempt in range(1):
                 try:
                     r=await client.get(candidate,headers=headers)
-                    if r.status_code in (429,500,502,503,504) and attempt==0:
-                        await asyncio.sleep(.7)
-                        continue
                     r.raise_for_status()
                     data=r.content
                     mime=""

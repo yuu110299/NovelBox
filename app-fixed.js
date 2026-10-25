@@ -178,9 +178,9 @@ async function loadChapters(){
   }
   await Promise.all(Array.from({length:Math.min(concurrency,ranges.length)},()=>worker()));
   downloaded=results.flat().map(ch=>{const old=previous.get(ch.url);return (!ch.content&&!ch.images?.length&&old&&(old.content||old.images?.length))?old:ch});
-  $('content').value=downloaded.map(x=>cleanSourceMarks(x.title)+'\n\n'+(x.content?cleanSourceMarks(x.content):(x.images?.length?'[Chương gồm '+x.images.length+' ảnh]':'[Chương tải lỗi — xem thông báo trạng thái]'))).join('\n\n\n');
+  $('content').value=downloaded.map(x=>cleanSourceMarks(wattpadChapterTitle(x.title))+'\n\n'+(x.content?cleanSourceMarks(wattpadChapterText(x)):(x.images?.length?'[Chương gồm '+x.images.length+' ảnh]':'[Chương tải lỗi — xem thông báo trạng thái]'))).join('\n\n\n');
   const failed=downloaded.filter(x=>!x.content&&!x.images?.length);
-  if(failed.length&& !host.endsWith('giatocvuongtai.com')&&!host.endsWith('wattpad.com')){
+  if(failed.length&& !host.endsWith('giatocvuongtai.com')){
    status.textContent='Đang thử tải lại '+failed.length+' chương bị lỗi...';
    for(let i=0;i<failed.length;i+=3){
     try{
@@ -237,11 +237,29 @@ function cleanSourceMarks(text){
 function sourceParagraphs(text){
  return cleanSourceMarks(text).split(/\n+/).map(x=>x.trim()).filter(Boolean);
 }
+function wattpadChapterTitle(title){
+ const host=(()=>{try{return new URL(storyMeta.story_url||$('url').value).hostname.toLowerCase()}catch{return ''}})();
+ if(!host.endsWith('wattpad.com'))return title;
+ return String(title||'').replace(/^\s*by\s+/i,'').trim();
+}
+function wattpadChapterText(ch){
+ let content=String(ch.content||'');
+ const host=(()=>{try{return new URL(storyMeta.story_url||$('url').value).hostname.toLowerCase()}catch{return ''}})();
+ if(!host.endsWith('wattpad.com'))return content;
+ const title=wattpadChapterTitle(ch.title).replace(/\s+/g,' ').trim().toLowerCase();
+ const lines=content.split(/\n+/);
+ while(lines.length){
+  const first=lines[0].trim().replace(/\s+/g,' ').toLowerCase();
+  if(!first||first===title||first==='by '+String(storyMeta.author||'').trim().toLowerCase()||first===String(storyMeta.author||'').trim().toLowerCase()&&!!storyMeta.author)lines.shift();
+  else break;
+ }
+ return lines.join('\n').trim();
+}
 function bookParagraphs(d){
  const out=[];
  if(storyMeta.categories?.length)out.push({text:'Thể loại: '+storyMeta.categories.join(', ')});
  if(storyMeta.description){out.push({text:'Giới Thiệu',heading:true});for(const p of sourceParagraphs(storyMeta.description))if(p.trim())out.push({text:p.trim()})}
- if(downloaded.length){for(const chapter of downloaded.filter(x=>x.content)){out.push({text:chapter.title,heading:true});for(const p of sourceParagraphs(chapter.content||''))if(p.trim())out.push({text:p.trim()})}}
+ if(downloaded.length){for(const chapter of downloaded.filter(x=>x.content)){out.push({text:wattpadChapterTitle(chapter.title),heading:true});for(const p of sourceParagraphs(wattpadChapterText(chapter)))if(p.trim())out.push({text:p.trim()})}}
  else for(const p of sourceParagraphs($('content').value))if(p.trim())out.push({text:p.trim()});
  return out;
 }
@@ -394,8 +412,8 @@ if(fmt==='docx'||fmt==='pdf'){
  for(let i=0;i<downloaded.length;i++){
   const chapter=downloaded[i];
   if(i%20===0){status.textContent='Đang tạo nội dung Word: '+(i+1)+'/'+downloaded.length+' chương...';await new Promise(resolve=>setTimeout(resolve,0))}
-  paragraphs.push(para(chapter.title,isVolume(chapter.title)?'volume':'heading'));
-  for(const block of sourceParagraphs(chapter.content||'')){if(block.trim())paragraphs.push(para(block.trim()))}
+  paragraphs.push(para(wattpadChapterTitle(chapter.title),isVolume(chapter.title)?'volume':'heading'));
+  for(const block of sourceParagraphs(wattpadChapterText(chapter))){if(block.trim())paragraphs.push(para(block.trim()))}
   for(const im of (imagesByChapter.get(i)||[]))paragraphs.push(new docx.Paragraph({alignment:docx.AlignmentType.CENTER,children:[new docx.ImageRun({data:im.bytes,transformation:{width:300,height:300},type:im.ext})]}));
  }
  if(!downloaded.length)for(const block of sourceParagraphs($('content').value))if(block.trim())paragraphs.push(para(block.trim()));
@@ -421,7 +439,7 @@ if(fmt==='docx'||fmt==='pdf'){
  }
 }
 else if(fmt==='epub'){if(!window.JSZip)throw Error('Không tải được thư viện EPUB.');const zip=new JSZip();zip.file('mimetype','application/epub+zip',{compression:'STORE'});zip.file('META-INF/container.xml','<?xml version="1.0" encoding="UTF-8"?><container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container"><rootfiles><rootfile full-path="OEBPS/content.opf" media-type="application/oebps-package+xml"/></rootfiles></container>');if(cover){zip.file('OEBPS/cover.'+cover.ext,cover.bytes)}chapterPictures.forEach((im,i)=>zip.file('OEBPS/image'+i+'.'+im.ext,im.bytes));const paragraphs=bookParagraphs(d);
-const chapterHtml=downloaded.length?downloaded.map((ch,ci)=>'<h2>'+escapeXml(ch.title)+'<\/h2>'+sourceParagraphs(ch.content||'').map(p=>'<p>'+escapeXml(p)+'<\/p>').join('')+chapterPictures.map((im,i)=>({im,i})).filter(x=>x.im.chapter===ci).map(x=>'<p><img src="image'+x.i+'.'+x.im.ext+'" alt="Minh họa chương" style="max-width:95%;height:auto"/><\/p>').join('')).join(''):paragraphs.map(p=>p.heading?'<h2>'+escapeXml(p.text)+'<\/h2>':'<p>'+escapeXml(p.text)+'<\/p>').join('');
+const chapterHtml=downloaded.length?downloaded.map((ch,ci)=>'<h2>'+escapeXml(wattpadChapterTitle(ch.title))+'<\/h2>'+sourceParagraphs(wattpadChapterText(ch)).map(p=>'<p>'+escapeXml(p)+'<\/p>').join('')+chapterPictures.map((im,i)=>({im,i})).filter(x=>x.im.chapter===ci).map(x=>'<p><img src="image'+x.i+'.'+x.im.ext+'" alt="Minh họa chương" style="max-width:95%;height:auto"/><\/p>').join('')).join(''):paragraphs.map(p=>p.heading?'<h2>'+escapeXml(p.text)+'<\/h2>':'<p>'+escapeXml(p.text)+'<\/p>').join('');
 zip.file('OEBPS/chapter.xhtml','<?xml version="1.0" encoding="utf-8"?><html xmlns="http://www.w3.org/1999/xhtml"><head><title>'+escapeXml(d.title)+'<\/title><\/head><body><h1>'+escapeXml(d.title)+'<\/h1>'+(cover?'<div><img src="cover.'+cover.ext+'" alt="Ảnh bìa truyện" style="max-width:85%;height:auto"/><\/div>':'')+(downloaded.length?'<p style="text-align:center"><strong>Độ dài:</strong> '+downloaded.length+' chương<\/p>':'')+(storyMeta.description?'<h2>Giới Thiệu<\/h2>'+sourceParagraphs(storyMeta.description).map(p=>'<p>'+escapeXml(p)+'<\/p>').join(''):'')+chapterHtml+'<\/body><\/html>');
 zip.file('OEBPS/nav.xhtml','<?xml version="1.0" encoding="utf-8"?><html xmlns="http://www.w3.org/1999/xhtml"><head><title>Mục lục<\/title><\/head><body><nav xmlns:epub="http://www.idpf.org/2007/ops" epub:type="toc"><ol><li><a href="chapter.xhtml">Nội dung<\/a><\/li><\/ol><\/nav><\/body><\/html>');zip.file('OEBPS/content.opf','<?xml version="1.0" encoding="utf-8"?><package xmlns="http://www.idpf.org/2007/opf" version="3.0" unique-identifier="bookid"><metadata xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:identifier id="bookid">urn:uuid:reedtt-demo</dc:identifier><dc:title>'+escapeXml(d.title)+'</dc:title><dc:language>vi</dc:language><dc:creator>'+escapeXml(d.author)+'</dc:creator><\/metadata><manifest><item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/>' +(cover?'<item id="cover" href="cover.'+cover.ext+'" media-type="'+cover.mime+'" properties="cover-image"/>':'') +chapterPictures.map((im,i)=>'<item id="img'+i+'" href="image'+i+'.'+im.ext+'" media-type="'+im.mime+'"/>').join('')+'<item id="chapter" href="chapter.xhtml" media-type="application/xhtml+xml"/><\/manifest><spine><itemref idref="chapter"/><\/spine><\/package>');save(await zip.generateAsync({type:'blob',mimeType:'application/epub+zip'},metadata=>{status.textContent='Đang nén EPUB: '+Math.round(metadata.percent)+'%';}),name)}
 status.textContent='Đã tạo '+fmt.toUpperCase()+' thành công.'+(downloaded.some(ch=>ch.images?.length)&&$('includeChapterImages').checked?' (Đã nhúng '+chapterPictures.length+' ảnh chương tải được; ảnh lỗi được bỏ qua.)':'')}catch(e){status.textContent='Lỗi: '+e.message}finally{exportButton.disabled=false}};

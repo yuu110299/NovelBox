@@ -1262,7 +1262,7 @@ async def _render_page(url):
                   const body=document.querySelector('.reader-demo-body,.reader-content,.chapter-content,#chapter-content,[data-chapter-content]');
                   const ps=body?[...body.querySelectorAll('.chapter-paragraph')]:[];
                   const fallback=body&&!ps.length?[...body.querySelectorAll('p.reader-demo-para,p')]:[];
-                  const content=(ps.length?ps:fallback).map(p=>p.textContent.trim()).filter(Boolean).join('\n\n');
+                  const content=(ps.length?ps:fallback).map(p=>p.textContent.trim()).filter(Boolean).join('\\n\\n');
                   return {title,links,content};
                 }""")
                 return data

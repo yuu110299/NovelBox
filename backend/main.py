@@ -1023,6 +1023,15 @@ async def image(req:ReadRequest):
     if not await public_image_host(u.hostname):raise HTTPException(400,"Máy chủ ảnh không an toàn hoặc không truy cập được.")
     headers={"User-Agent":"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/131.0.0.0 Safari/537.36","Referer":f"https://{u.hostname}/","Accept":"image/png,image/jpeg,image/webp,*/*"}
     candidates=[url]
+    if u.hostname=="static.truyenfull.live" and u.path.startswith("/cover/"):
+        # The CDN may require the source site's Referer, and may redirect to
+        # another image host. Try the original URL first, then image relays.
+        headers["Referer"]="https://truyenfull.live/"
+        from urllib.parse import quote
+        candidates.extend([
+            "https://wsrv.nl/?url="+quote(url,safe=""),
+            "https://images.weserv.nl/?url="+quote(url,safe=""),
+        ])
     # A public image CDN can fetch the exact same NavyTeams avatar when Render
     # cannot resolve/reach navyteams.com. Never use this for arbitrary URLs.
     if u.hostname in ("navyteams.com","www.navyteams.com") and u.path.startswith("/storage/story_avatars/"):
@@ -1051,7 +1060,7 @@ async def image(req:ReadRequest):
         ]
         relay=[ "https://wsrv.nl/?url="+quote(v,safe="") for v in variants ]
         candidates=list(dict.fromkeys([*variants,*relay]))
-    async with httpx.AsyncClient(timeout=7 if u.hostname=="lh3.googleusercontent.com" and u.path.startswith("/pw/") else 22,follow_redirects=False,trust_env=False) as client:
+    async with httpx.AsyncClient(timeout=7 if u.hostname=="lh3.googleusercontent.com" and u.path.startswith("/pw/") else 22,follow_redirects=True,trust_env=False) as client:
         last_error=None
         for candidate in candidates:
             for attempt in range(1 if u.hostname=="lh3.googleusercontent.com" and u.path.startswith("/pw/") else 2):

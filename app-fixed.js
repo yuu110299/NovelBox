@@ -79,7 +79,7 @@ async function browserChapter(url){
 }
 async function loadStory(){
  const status=$('urlstatus'),btn=$('check');
- let u;try{u=safeUrl($('url').value.trim());const src=$('source').value;const detected=[...$('source').options].map(x=>x.value).find(x=>x!=='auto'&&(u.hostname===x||u.hostname.endsWith('.'+x)));if(!detected)throw Error('Nguồn truyện chưa được hỗ trợ.');if(src!=='auto'&&src!==detected)$('source').value=detected}catch(e){status.textContent=e.message||'Nhập URL HTTPS hợp lệ.';return}
+ let u;try{u=safeUrl($('url').value.trim());const src=$('source').value;const detected=[...$('source').options].map(x=>x.value).find(x=>x!=='auto'&&(u.hostname===x||u.hostname.endsWith('.'+x)));if(!detected)throw Error('Nguồn truyện chưa được hỗ trợ: '+u.hostname+'. Hãy kiểm tra đường dẫn.');if(src!=='auto'&&src!==detected)$('source').value=detected}catch(e){status.textContent=e.message||'Nhập URL HTTPS hợp lệ.';return}
  btn.disabled=true;status.textContent='Đang rà mục lục và các trang danh sách chương...';
  try{
   let data;

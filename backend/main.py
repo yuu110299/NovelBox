@@ -1031,13 +1031,16 @@ async def image(req:ReadRequest):
     if u.hostname=="lh3.googleusercontent.com" and u.path.startswith("/pw/"):
         from urllib.parse import quote
         photo_root=re.sub(r"=w\\d+-h\\d+(?:-[a-z-]+)?$|=s\\d+$","",url)
-        for photo_url in (photo_root+"=w215-h322-s-no",photo_root+"=s800"):
-            if photo_url not in candidates:candidates.append(photo_url)
-            candidates.append("https://wsrv.nl/?url="+quote(photo_url,safe=""))
-    async with httpx.AsyncClient(timeout=22,follow_redirects=False,trust_env=False) as client:
+        # Put relays FIRST: a slow direct request previously exhausted the
+        # browser's timeout before the fallback was ever attempted.
+        cover_variants=(photo_root+"=w215-h322-s-no",photo_root+"=s800")
+        candidates=["https://wsrv.nl/?url="+quote(photo_url,safe="") for photo_url in cover_variants]
+        candidates.extend(cover_variants)
+        candidates.append(url)
+    async with httpx.AsyncClient(timeout=7 if u.hostname=="lh3.googleusercontent.com" and u.path.startswith("/pw/") else 22,follow_redirects=False,trust_env=False) as client:
         last_error=None
         for candidate in candidates:
-            for attempt in range(2):
+            for attempt in range(1 if u.hostname=="lh3.googleusercontent.com" and u.path.startswith("/pw/") else 2):
                 try:
                     r=await client.get(candidate,headers=headers)
                     if r.status_code in (429,500,502,503,504) and attempt==0:

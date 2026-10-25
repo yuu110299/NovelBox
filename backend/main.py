@@ -975,13 +975,15 @@ async def image(req:ReadRequest):
     # Truyenfull.live often serves book covers from Google Photos CDN.
     # Try the same underlying image at different public size variants.
     if u.hostname.endswith(".googleusercontent.com") and u.path.startswith("/pw/"):
-        from urllib.parse import unquote
-        original_path=unquote(u.path)
-        base_path=re.sub(r"=(?:w\\d+|h\\d+|s\\d+|no|c|k)(?:-[a-z0-9]+)*$", "", original_path, flags=re.I)
-        if base_path!=original_path:
-            candidates=[f"https://{u.hostname}{base_path}=s0",f"https://{u.hostname}{base_path}=w800",f"https://{u.hostname}{original_path}",url]
-        else:
-            candidates=[f"https://{u.hostname}{original_path}=s0",url]
+        from urllib.parse import unquote, quote
+        # Truyenfull uses a Google Photos link with a percent-encoded '=' and
+        # an authuser query. Normalize the image ID before trying public sizes.
+        decoded_path=unquote(u.path)
+        image_id=decoded_path.split("=",1)[0]
+        origin=f"https://{u.hostname}{image_id}"
+        candidates=[origin+"=s0",origin+"=w800-h1200",origin+"=w400",
+                    f"https://{u.hostname}{decoded_path}",url,
+                    "https://wsrv.nl/?url="+quote(origin+"=w800",safe="")]
     # A public image CDN can fetch the exact same NavyTeams avatar when Render
     # cannot resolve/reach navyteams.com. Never use this for arbitrary URLs.
     if u.hostname in ("navyteams.com","www.navyteams.com") and u.path.startswith("/storage/story_avatars/"):

@@ -492,7 +492,7 @@ def chapter_body(soup, source_url=''):
     if host.endswith("dualeotruyenfull.net"):
         preferred=(".reading-content",".chapter-content","#chapter-content",".entry-content",".reader-content",".chapter-body","article .entry-content","article")
     if host.endswith("luotnovel1.site"):
-        preferred=("#chapter-content","#chapterContent",".chapter-content",".chapter-body",".reading-content",".read-content",".chapter-text",".entry-content",".content-chapter",".novel-content","article", "[class*='chapter-content']")
+        preferred=("#textReadingArea","#chapter-content","#chapterContent",".chapter-content",".chapter-body",".reading-content",".read-content",".chapter-text",".entry-content",".content-chapter",".novel-content","article", "[class*='chapter-content']")
     if host.endswith("truyenfull.live"):
         preferred=("#chapter-c","#chapter-content","#chapterContent",".chapter-c",".chapter-content",".chapter-body",".reading-content",".entry-content","[itemprop='articleBody']")
         chapter=next((soup.select_one(sel) for sel in preferred if soup.select_one(sel)),None)

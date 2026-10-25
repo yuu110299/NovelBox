@@ -465,7 +465,11 @@ def chapter_body(soup, source_url=''):
     ad_container=re.compile(r"(?:^|[\\s_-])(ads?|advert(?:isement|ising)?|banner|sponsor(?:ed)?|promo(?:tion)?|tracking|pixel|recommend(?:ation)?|related|popup|widget)(?:$|[\\s_-])",re.I)
     ad_asset=re.compile(r"(?:doubleclick|googlesyndication|googleadservices|adservice|adnxs|taboola|outbrain|adsystem|adserver|\\/ads?\\/|\\/banners?\\/|tracking|pixel\\.gif)",re.I)
     for img in chapter.select("img"):
+        # Only images inside the selected chapter body, never page avatars/covers/widgets.
         if img.find_parent(["aside","nav","footer","header"]):continue
+        if img.find_parent(class_=re.compile(r"(?:avatar|profile|author|cover|thumbnail|related|recommend|sidebar|advert|banner|logo|icon)",re.I)):continue
+        if img.find_parent(id=re.compile(r"(?:avatar|profile|author|cover|thumbnail|related|recommend|sidebar|advert|banner|logo|icon)",re.I)):continue
+        if re.search(r"(?:avatar|profile|author|cover|thumbnail|related|recommend|sidebar|advert|banner|logo|icon)", " ".join(str(img.get(k,"")) for k in ("class","id","alt")),re.I):continue
         if any(ad_container.search(" ".join(str(t.get(k,"")) for k in ("id","class","data-ad-slot","data-ad-client"))) for t in [img,*list(img.parents)[:5]] if getattr(t,"attrs",None)):continue
         width=img.get("width","");height=img.get("height","")
         try:

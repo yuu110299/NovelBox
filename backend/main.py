@@ -461,9 +461,21 @@ def chapter_body(soup, source_url=''):
     if special:
         for tag in list(chapter.select('a,button,header,footer,nav,aside,.share,.sharing,.story-stats,.stats,.toolbar,.story-actions,.action-bar,[role=toolbar],[role=navigation]')):tag.decompose()
     images=[]
+    seen_images=set()
+    ad_container=re.compile(r"(?:^|[\\s_-])(ads?|advert(?:isement|ising)?|banner|sponsor(?:ed)?|promo(?:tion)?|tracking|pixel|recommend(?:ation)?|related|popup|widget)(?:$|[\\s_-])",re.I)
+    ad_asset=re.compile(r"(?:doubleclick|googlesyndication|googleadservices|adservice|adnxs|taboola|outbrain|adsystem|adserver|\\/ads?\\/|\\/banners?\\/|tracking|pixel\\.gif)",re.I)
     for img in chapter.select("img"):
-        src=img.get("data-src") or img.get("data-original") or img.get("src")
-        if src:images.append(src)
+        if img.find_parent(["aside","nav","footer","header"]):continue
+        if any(ad_container.search(" ".join(str(t.get(k,"")) for k in ("id","class","data-ad-slot","data-ad-client"))) for t in [img,*list(img.parents)[:5]] if getattr(t,"attrs",None)):continue
+        width=img.get("width","");height=img.get("height","")
+        try:
+            if width and height and (int(width)<=2 or int(height)<=2):continue
+        except ValueError:pass
+        src=img.get("data-src") or img.get("data-original") or img.get("data-lazy-src") or img.get("src")
+        if not src or ad_asset.search(src):continue
+        resolved=image_url(source_url,src)
+        if resolved and resolved not in seen_images:
+            seen_images.add(resolved);images.append(resolved)
     # Extract block paragraphs without inserting breaks between inline spans.
     from bs4 import NavigableString, Tag
     blocks=[]

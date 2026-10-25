@@ -404,6 +404,12 @@ async function coverBytes(){
    result=await coverFromPublicRelays(url);
    if(!result)throw Error('Không tải được ảnh bìa Truyenfull sau khi thử nguồn và dịch vụ ảnh trung gian: '+error.message);
   }
+ }else if(url&&(()=>{try{return new URL(storyUrl).hostname.endsWith('.wordpress.com')}catch{return false}})()){
+  try{result=await imageBytes(url,true)}catch(error){
+   console.warn('WordPress cover proxy failed; trying public image relays',error);
+   result=await coverFromPublicRelays(url);
+   if(!result)throw error;
+  }
  }else result=await imageBytes(url,true);
  // Verified cover for Nhất phẩm phu nhân on tichvulam WordPress.
  // Only use this fallback for this story, never for other books on the blog.

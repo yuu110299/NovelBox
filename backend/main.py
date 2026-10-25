@@ -383,6 +383,12 @@ def wattpad_story_text(html,base,include_images=False):
         value=re.sub(r'[ \t]+',' ',value)
         value=wattpad_clean_text(value)
         if value:paragraphs.append(value)
+    # Some Wattpad ZIP parts wrap story text in divs rather than p tags.
+    # Recover their text, but never use a full public webpage as fallback.
+    if not paragraphs and root is not None and not soup.select_one('header,nav,footer,meta[property="og:type"]'):
+        for bad in root.select('script,style,aside,nav,footer,header,button'):bad.decompose()
+        fallback=wattpad_clean_text(root.get_text('\n',strip=True))
+        if fallback:paragraphs=[fallback]
     return wattpad_clean_text('\n\n'.join(paragraphs))[:300000],images[:1000]
 
 def page_links(soup,base,story_path):
@@ -963,13 +969,13 @@ async def batch(req:BatchRequest):
                         part=archive.get(match.group(1)) if match else None
                         if part is not None:
                             text,imgs=wattpad_story_text(part,item['url'],req.include_images)
-                            if (text or imgs) and (not req.include_images or imgs):return {'title':item['title'],'url':item['url'],'content':text,'images':imgs}
+                            if (text or imgs):return {'title':item['title'],'url':item['url'],'content':text,'images':imgs}
                     if is_wattpad and item.get("text_url"):
                         try:
                             direct=await client.get(item["text_url"],timeout=25)
                             if direct.status_code==200 and len(direct.content)<3000000:
                                 text,imgs=wattpad_story_text(direct.text,item["url"],req.include_images)
-                                if (text or imgs) and (not req.include_images or imgs):
+                                if (text or imgs):
                                     return {"title":item["title"],"url":item["url"],"content":text,"images":imgs}
                         except httpx.HTTPError:
                             pass
@@ -1676,13 +1682,13 @@ async def batch(req:BatchRequest):
                         part=archive.get(match.group(1)) if match else None
                         if part is not None:
                             text,imgs=wattpad_story_text(part,item['url'],req.include_images)
-                            if (text or imgs) and (not req.include_images or imgs):return {'title':item['title'],'url':item['url'],'content':text,'images':imgs}
+                            if (text or imgs):return {'title':item['title'],'url':item['url'],'content':text,'images':imgs}
                     if is_wattpad and item.get("text_url"):
                         try:
                             direct=await client.get(item["text_url"],timeout=25)
                             if direct.status_code==200 and len(direct.content)<3000000:
                                 text,imgs=wattpad_story_text(direct.text,item["url"],req.include_images)
-                                if (text or imgs) and (not req.include_images or imgs):
+                                if (text or imgs):
                                     return {"title":item["title"],"url":item["url"],"content":text,"images":imgs}
                         except httpx.HTTPError:
                             pass

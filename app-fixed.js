@@ -139,9 +139,10 @@ async function loadChapters(){
  const total=end-start+1;
  let failures=0;
  try{
-  const chunkSize=5;
   const host=new URL(url).hostname;
-  const concurrency=host.endsWith('wattpad.com')?2:host.endsWith('giatocvuongtai.com')?1:5;
+  const fastSource=host.endsWith('truyenfull.live');
+  const chunkSize=fastSource?12:5;
+  const concurrency=host.endsWith('wattpad.com')?2:host.endsWith('giatocvuongtai.com')?1:fastSource?3:5;
   const ranges=[];
   for(let from=start;from<=end;from+=chunkSize)ranges.push({from,to:Math.min(from+chunkSize-1,end)});
   const results=new Array(ranges.length);
@@ -150,7 +151,7 @@ async function loadChapters(){
    while(next<ranges.length){
     const idx=next++,{from,to}=ranges[idx],items=discovered.slice(from-1,to);
     status.textContent='Đang thu thập '+completed+'/'+total+' chương để tạo file...';
-    const cached=items.map(item=>{const old=previous.get(item.url);return old&&(!include_images||old.images?.length)?old:null});
+    const cached=items.map(item=>{const old=previous.get(item.url);return old&&(old.content||old.images?.length)?old:null});
     let result=cached.every(x=>x&&(x.content||x.images?.length))?cached:null;
     if(!result){
      let lastError;

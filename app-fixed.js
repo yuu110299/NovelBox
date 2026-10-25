@@ -33,7 +33,7 @@ async function api(path,body){
   r=await fetch(API+path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body),signal:AbortSignal.timeout(120000)});
  }catch(e){
   if(e?.name==='TimeoutError'||e?.name==='AbortError')throw Error('Máy chủ xử lý truyện phản hồi quá lâu (quá 120 giây). Vui lòng thử lại sau.');
-  throw Error('Không kết nối được máy chủ xử lý truyện (Render). Hãy kiểm tra máy chủ đang chạy và cấu hình CORS; đây chưa phải lỗi đọc chương của nguồn truyện.');
+  throw Error('Không nhận được phản hồi từ máy chủ Render ('+(e?.name||'NetworkError')+'). Có thể do mạng, máy chủ khởi động lại hoặc lỗi kết nối; chưa đủ căn cứ kết luận do CORS hay nguồn truyện.');
  }
  const data=await r.json().catch(()=>({}));
  if(!r.ok)throw Error(typeof data.detail==='string'?data.detail:'HTTP '+r.status);

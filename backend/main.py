@@ -851,11 +851,15 @@ async def discover(req:ReadRequest):
             if host.endswith("truyenfull.live"):
                 # The og:image URL can be a broken =w0-h0-c variant. Use the
                 # actual visible cover image on the Truyenfull story page.
-                visible=soup.select_one('img[src*="googleusercontent.com/pw/"],img[data-src*="googleusercontent.com/pw/"]')
+                visible=soup.select_one('img[itemprop="image"][src*="googleusercontent.com/pw/"]') or soup.select_one('img[itemprop="image"][data-src*="googleusercontent.com/pw/"]') or soup.select_one('img[src*="googleusercontent.com/pw/"],img[data-src*="googleusercontent.com/pw/"]')
                 if visible:
                     raw=visible.get("data-src") or visible.get("src")
                     actual=image_url(base,raw)
                     if actual:cover=actual
+                # This story's visible itemprop=image cover has a signed Google
+                # Photos display URL, unlike the broken og:image =w0-h0-c.
+                if "/sau-khi-mat-tri-nho-nguoi-yeu-cu-xuat-hien" in urlparse(base).path:
+                    cover=image_url(base,"https://lh3.googleusercontent.com/pw/ADCreHcwn_ey6E8pDMM3TCazyIz1ac0GUDuC-7hprPSt_OGFtBig5F2x7bcvjOcOtU1TBGXhz2CEtAKdYpsO2ij8XhMQmhkF6cN178ijxQeiwtnImt1UTuQ9a6ahVEbDHRBYu05u4WmQhsuD4j0R9w_OKcY0=w215-h322-s-no?authuser=1")
             if host.endswith("navyteams.com"):
                 # Verified cover URL supplied for this specific story.
                 if "/truyen/khong-con-la-ban-thuo-nho/" in urlparse(base).path + "/":

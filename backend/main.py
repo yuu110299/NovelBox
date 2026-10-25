@@ -1071,6 +1071,20 @@ async def image(req:ReadRequest):
         from urllib.parse import quote
         candidates.append("https://i0.wp.com/"+u.hostname+u.path)
         candidates.append("https://wsrv.nl/?url="+quote(url,safe=""))
+    # WordPress blogs use multiple public upload hosts (files.wordpress.com,
+    # i0.wp.com, and custom wordpress.com subdomains).
+    if (u.hostname or "").endswith(".wordpress.com") and "/wp-content/uploads/" in u.path:
+        from urllib.parse import quote
+        candidates.extend([
+            "https://i0.wp.com/"+u.hostname+u.path,
+            "https://wsrv.nl/?url="+quote(url,safe=""),
+        ])
+    if (u.hostname or "").endswith(".files.wordpress.com"):
+        from urllib.parse import quote
+        candidates.extend([
+            "https://i0.wp.com/"+u.hostname+u.path,
+            "https://wsrv.nl/?url="+quote(url,safe=""),
+        ])
     # Truyenfull cover photos are hosted by Google Photos. Render can fail to
     # reach lh3.googleusercontent.com directly; try a public image relay.
     # Restricted to this Google Photos path, not other websites or sources.

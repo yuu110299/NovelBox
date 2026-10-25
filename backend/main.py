@@ -510,6 +510,15 @@ def chapter_body(soup, source_url=''):
     elif host.endswith("giatocvuongtai.com"):
         # Reader is a client-rendered Astro app; these are best-effort HTML fallbacks.
         chapter=next((soup.select_one(sel) for sel in ("[data-reader-content]",".reader-content",".chapter-content",".prose","article") if soup.select_one(sel)),None)
+    elif host.endswith("luotnovel1.site"):
+        chapter=soup.select_one("#textReadingArea")
+        if chapter is None:
+            chapter=next((soup.select_one(sel) for sel in preferred if soup.select_one(sel)),None)
+        if chapter is not None:
+            chapter=BeautifulSoup(str(chapter),"html.parser")
+            for spacer in chapter.select("p.para-break"):
+                if not spacer.get_text(" ",strip=True):
+                    spacer.decompose()
     else:
         chapter=next((soup.select_one(sel) for sel in preferred if soup.select_one(sel)),None) if special else next((soup.select_one(sel) for sel in SELECTORS if soup.select_one(sel)),None)
     if not chapter:return "",[]

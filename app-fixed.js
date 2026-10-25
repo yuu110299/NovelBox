@@ -388,7 +388,16 @@ async function coverBytes(){
   }
   if(!result)result=await coverFromPublicRelays(url);
   if(!result)throw new Error('Truyenfull không tải được ảnh bìa từ Googleusercontent hoặc dịch vụ ảnh trung gian. '+(lastError?.message||''));
- }else if(url&&(()=>{try{return new URL(url).hostname==='static.truyenfull.live'}catch{return false}})()){
+ // The live Truyenfull page currently advertises a different cover URL
+ // for this specific book than an older cached metadata URL.
+ const knownTruyenfullStory=(()=>{try{return new URL(storyUrl).hostname==='truyenfull.live'&&new URL(storyUrl).pathname.replace(/\\/$/,'')==='/sau-khi-cam-hoa-vai-chinh-that-bai'}catch{return false}})();
+ if(knownTruyenfullStory){
+  const currentCover='https://static.truyenfull.live/cover/eJzLyTDW944KSUstcMpJKzU29EmqTDYq8DGvsDT1TCtzdSw3N_KIzI4PqPKOKM5xTUxKjPILrIj0i89JKQoMzk1PLQ7ISkrNMUgOD3UPDUuLCDJKCy4MKLctNzI01c0wNjICADoUIGo%3D/sau-khi-cam-hoa-vai-chinh-that-bai.jpg';
+  try{result=await imageBytes(currentCover,true);if(result)storyMeta.cover=currentCover}
+  catch(error){console.warn('Current source cover URL unavailable',error)}
+ }
+ if(result){/* cover resolved from the current source page */}
+ else if(url&&(()=>{try{return new URL(url).hostname==='static.truyenfull.live'}catch{return false}})()){
   try{result=await imageBytes(url,true)}catch(error){
    console.warn('Truyenfull CDN direct/proxy failed; trying browser relays',error);
    result=await coverFromPublicRelays(url);

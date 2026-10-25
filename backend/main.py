@@ -1307,6 +1307,8 @@ def _gv_story_from_props(html_text):
 @app.post("/render-discover")
 async def render_discover(req: ReadRequest):
     from urllib.parse import quote
+    if (urlparse(req.url).hostname or "").lower().endswith("luotnovel1.site"):
+        return await luotnovel_discover(req.url)
     if (urlparse(req.url).hostname or "").endswith("giatocvuongtai.com") and urlparse(req.url).path.startswith("/stories/"):
         import httpx
         try:

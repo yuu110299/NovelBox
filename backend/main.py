@@ -1242,6 +1242,14 @@ async def _render_page(url):
                 for _ in range(8):
                     await page.evaluate("window.scrollBy(0, Math.max(650, window.innerHeight))")
                     await page.wait_for_timeout(500)
+                if (urlparse(target).hostname or "").endswith("giatocvuongtai.com"):
+                    try:
+                        picker=page.locator('button[aria-label="Chọn chương"],.reader-demo-footer-btn--chapter').first
+                        if await picker.count():
+                            await picker.click(timeout=4000)
+                            await page.wait_for_timeout(900)
+                    except Exception:
+                        pass
                 data = await page.evaluate("""() => {
                   const title = document.querySelector('h1')?.textContent?.trim() || document.querySelector("meta[property='og:title']")?.content || '';
                   const links = [...document.querySelectorAll('a[href]')].map(a => ({

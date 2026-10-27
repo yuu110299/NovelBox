@@ -587,6 +587,8 @@ def chapter_body(soup, source_url=''):
             for spacer in chapter.select("p.para-break"):
                 if not spacer.get_text(" ",strip=True):
                     spacer.decompose()
+    elif host.endswith("truyenhda.cc"):
+        chapter=next((soup.select_one(sel) for sel in ("#chapter-content","#chapterContent","#chapter-c",".chapter-c",".chapter-content",".chapter-body",".reading-content",".entry-content","#content-chapter",".content-chapter","#content",".content","[itemprop=articleBody]") if soup.select_one(sel)),None)
     else:
         chapter=next((soup.select_one(sel) for sel in preferred if soup.select_one(sel)),None) if special else next((soup.select_one(sel) for sel in SELECTORS if soup.select_one(sel)),None)
     if not chapter:return "",[]

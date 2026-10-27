@@ -133,6 +133,8 @@ async def get_page(client, url):
         r=await client.get(target)
     if r.status_code in (401,403,429) and (urlparse(url).hostname or "").endswith("inkitt.com"):
         raise HTTPException(502,"Inkitt từ chối yêu cầu từ máy chủ (HTTP "+str(r.status_code)+"). Không thể tải chương công khai qua Render; không phải lỗi tìm mục lục.")
+    if r.status_code==429 and (urlparse(url).hostname or "").lower().endswith("truyenhda.cc"):
+        raise HTTPException(429,"Truyện HD đang giới hạn truy cập (HTTP 429). Vui lòng đợi một lúc rồi thử lại với ít chương hơn; NovelBox không thể tải khi nguồn từ chối.")
     r.raise_for_status()
     if "html" not in r.headers.get("content-type","").lower() or len(r.content)>3_000_000:
         raise HTTPException(400,"Trang không phải HTML hợp lệ hoặc quá lớn.")
@@ -1094,7 +1096,8 @@ async def batch(req:BatchRequest):
         chosen=discovery["chapters"][req.start-1:req.end]
     if not chosen:raise HTTPException(404,"Không tìm thấy chương.")
     is_wattpad=(urlparse(req.url).hostname or '').lower().endswith('wattpad.com')
-    semaphore=asyncio.Semaphore(8 if not is_wattpad else 5)
+    is_truyenhda=(urlparse(req.url).hostname or '').lower().endswith("truyenhda.cc")
+    semaphore=asyncio.Semaphore(1 if is_truyenhda else (5 if is_wattpad else 8))
     async with httpx.AsyncClient(timeout=20,follow_redirects=False,limits=httpx.Limits(max_connections=10),headers={"User-Agent":"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36","Accept":"text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8","Accept-Language":"en-US,en;q=0.9"}) as client:
         archive_url=req.url
         if is_wattpad and not re.search(r"/story/\\d+",urlparse(req.url).path):
@@ -1121,6 +1124,9 @@ async def batch(req:BatchRequest):
                             pass
                     is_luot=(urlparse(item["url"]).hostname or "").lower().endswith("luotnovel1.site")
                     try:
+                        if is_truyenhda:
+                            # Space requests out; never retry a rate-limited response aggressively.
+                            await asyncio.sleep(1.5)
                         soup,base=await get_page(client,item["url"])
                         content,images=chapter_body(soup,base)
                     except (httpx.HTTPError,HTTPException):

@@ -180,29 +180,21 @@ def chapter_links(soup,base,story_path):
     host=(urlparse(base).hostname or "").lower()
     selectors=".list-chapter a[href],#list-chapter a[href],.chapter-list a[href],.list-chapters a[href],ul.list-chapter a[href],#chaptersList a[href],a[href*='chuong-'],a[href*='chapter-']"
     if host.endswith("dualeotruyenfull.net"):
-        # Dưa Leo-specific parser: accept chapter URLs from both HTML anchors
-        # and embedded markup, including optional chapter title slugs.
-        story_root=story_path.rstrip("/")
-        pattern=re.compile(r"^"+re.escape(story_root)+r"/chuong[-_/]?(\d+)(?:[-/][^?#]*)?/?$",re.I)
-        candidates=[]
+        root=story_path.rstrip("/")+"/chuong-"
         for anchor in soup.select("a[href]"):
-            candidates.append((anchor.get("href",""),anchor.get_text(" ",strip=True)))
-        for raw in re.findall(r"""(?:https?://[^\s"'<>]+|/doc-truyen/[^\s"'<>]+)""",str(soup)):
-            if "/chuong-" in raw.lower():candidates.append((raw.replace("&amp;","&"),""))
-        for raw,title in candidates:
-            href=normalized_url(base,raw)
+            href=normalized_url(base,anchor.get("href",""))
             if not href:continue
             parsed=urlparse(href)
             if (parsed.hostname or "").lower().removeprefix("www.")!=host.removeprefix("www."):continue
-            match=pattern.fullmatch(parsed.path)
+            if not parsed.path.startswith(root):continue
+            label=anchor.get_text(" ",strip=True)
+            match=re.search(r"Chương\s*(\d+)",label,re.I)
             if not match:continue
             number=int(match.group(1))
-            if number<1:continue
             href=urlunparse((parsed.scheme,parsed.netloc,parsed.path,"","",""))
-            label=re.search(r"(Chương\s*\d+\s*[:.\\-]?\s*[^\n]*)",title,re.I)
-            name=(label.group(1) if label else title or "Chương "+str(number)).strip()
-            if href not in found:found[href]={"title":name[:180],"url":href}
-        return sorted(found.values(),key=lambda item:(int(re.search(r"/chuong[-_/]?(\d+)",urlparse(item["url"]).path,re.I).group(1)),item["url"]))
+            title=label.strip()[:180] or "Chương "+str(number)
+            found[href]={"title":title,"url":href}
+        return sorted(found.values(),key=lambda item:int(re.search(r"Chương\s*(\d+)",item["title"],re.I).group(1)))
     if host.endswith("navyteams.com"):
         # Read chapter entries by their HTML container, never by chapter-name text.
         # Keep DOM order and include extras with arbitrary names.
@@ -878,22 +870,1305 @@ async def discover(req:ReadRequest):
                         return await listing(page)
                 for group in await asyncio.gather(*(limited_listing(p) for p in pending)):
                     for x in group:found[x["url"]]=x
-            # Dưa Leo: this story has 112 numbered chapters. Its paginated
-            # listing can omit chapters, so fill only missing numbered URLs.
-            # Keep scraped chapter titles where available.
-            if (urlparse(base).hostname or "").lower().endswith("dualeotruyenfull.net") and story_path.rstrip("/").endswith("/boylove-18-anh-hai-cua-toi"):
-                root=base.split("/doc-truyen/",1)[0]+story_path.rstrip("/")
-                known_numbers=set()
-                for item in found.values():
-                    m=re.search(r"/chuong-(\d+)(?:/|$)",urlparse(item["url"]).path,re.I)
-                    if m:known_numbers.add(int(m.group(1)))
-                for number in range(1,113):
-                    if number not in known_numbers:
-                        chapter_url=root+"/chuong-"+str(number)+"/"
-                        found[chapter_url]={"title":"Chương "+str(number),"url":chapter_url}
             if (urlparse(base).hostname or "").lower().endswith("dualeotruyenfull.net"):
                 found=dict(sorted(found.items(),key=lambda pair:int(re.search(r"/chuong-(\d+)",urlparse(pair[0]).path,re.I).group(1))
                                   if re.search(r"/chuong-(\d+)",urlparse(pair[0]).path,re.I) else 10**9))
+            def meta(selector):
+                t=soup.select_one(selector)
+                return (t.get("content") or "").strip() if t else ""
+            def label(selector):
+                t=soup.select_one(selector)
+                return t.get_text(" ",strip=True) if t else ""
+            desc_node=soup.select_one("p.story-summary,.desc-text,.book-desc,.story-description,.description,.desc,.intro,.summary,[itemprop=description]")
+            if desc_node:
+                # Keep source paragraph boundaries, explicit BR breaks, and inline sentence flow.
+                for junk in desc_node.select("button,script,style,.read-more,.show-more,.more-btn,.expand,.collapse,[role=button],a"):
+                    junk.decompose()
+                for br in desc_node.select("br"):br.replace_with("\n")
+                for tag in reversed(list(desc_node.select("p,div,section,article,li,blockquote,h1,h2,h3,h4"))):
+                    tag.insert_before("\n\n")
+                    tag.insert_after("\n\n")
+                description=desc_node.get_text("",strip=False)
+                description=description.replace("\r","")
+                description=re.sub(r"[ \t]+"," ",description)
+                description=re.sub(r" *\n *","\n",description)
+                description=re.sub(r"\n{3,}","\n\n",description).strip()
+            else:description=""
+            if (urlparse(base).hostname or "").lower().endswith("wordpress.com"):
+                article=soup.select_one("div.entry-content,div.post-content,div.single-entry-content,.post-entry")
+                if article:
+                    lines=[]
+                    for block in article.select("p,h1,h2,h3,h4"):
+                        if block.find_parent(["nav","aside","footer"]) or block.find_parent(class_=re.compile("comment|widget|related|share",re.I)):continue
+                        # Preserve explicit HTML line breaks within a single WordPress paragraph.
+                        for br in block.select("br"):
+                            br.replace_with("\n")
+                        block_text=block.get_text(" ",strip=False)
+                        block_text=re.sub(r"[ \t]*\n[ \t]*","\n",block_text)
+                        block_text=re.sub(r"[ \t]+"," ",block_text).strip()
+                        if re.search(r"^(?:Chương|Chapter|Chap) +[0-9]+",block_text,re.I):break
+                        if block.select_one("a[href]") and re.search(r"^(?:Chương|Chapter|Chap) +[0-9]+",block_text,re.I):break
+                        if block_text and not block.find_parent(["p","h1","h2","h3","h4"]):lines.append(block_text)
+                    if lines:description="\n\n".join(lines)[:15000]
+            # Some story pages keep the complete synopsis inside the Summary section,
+            # while meta descriptions and collapsed preview nodes contain only excerpts.
+            summary_candidates=[]
+            for selector in ("#summary",".story-summary",".summary-content",".summary-text",".story-description",".book-summary",".novel-summary","[itemprop='description']",".description",".summary"):
+                for node in soup.select(selector):
+                    from bs4 import BeautifulSoup as _BS
+                    copy=_BS(str(node),"html.parser")
+                    for junk in copy.select("script,style,button,.read-more,.show-more,.expand,.collapse,[role=button]"):
+                        junk.decompose()
+                    for br in copy.select("br"):
+                        br.replace_with("\n")
+                    for block in reversed(list(copy.select("p,li,blockquote"))):
+                        block.insert_before("\n\n")
+                        block.insert_after("\n\n")
+                    candidate=copy.get_text("",strip=False)
+                    candidate=re.sub(r"[ \\t]+"," ",candidate)
+                    candidate=re.sub(r" *\n *","\n",candidate)
+                    candidate=re.sub(r"\n{3,}","\n\n",candidate).strip()
+                    if candidate and candidate not in summary_candidates:
+                        summary_candidates.append(candidate)
+            if summary_candidates:
+                best=max(summary_candidates,key=len)
+                if len(best)>len(description):
+                    description=best
+            description=description or meta("meta[name=description]") or meta("meta[property='og:description']")
+            description=re.sub(r"\s*(?:Xem thêm|Thu gọn|Đọc thêm|Show more|Read more)\s*$","",description,flags=re.I).strip()
+            host=(urlparse(base).hostname or "").lower()
+            if host.endswith("truyenfull.live"):
+                # The og:image URL can be a broken =w0-h0-c variant. Use the
+                # actual visible cover image on the Truyenfull story page.
+                visible=soup.select_one('img[itemprop="image"][src*="googleusercontent.com/pw/"]') or soup.select_one('img[itemprop="image"][data-src*="googleusercontent.com/pw/"]') or soup.select_one('img[src*="googleusercontent.com/pw/"],img[data-src*="googleusercontent.com/pw/"]')
+                if visible:
+                    raw=visible.get("data-src") or visible.get("src")
+                    actual=image_url(base,raw)
+                    if actual:cover=actual
+                # This story's visible itemprop=image cover has a signed Google
+                # Photos display URL, unlike the broken og:image =w0-h0-c.
+                if "/sau-khi-mat-tri-nho-nguoi-yeu-cu-xuat-hien" in urlparse(base).path:
+                    cover=image_url(base,"https://lh3.googleusercontent.com/pw/ADCreHcwn_ey6E8pDMM3TCazyIz1ac0GUDuC-7hprPSt_OGFtBig5F2x7bcvjOcOtU1TBGXhz2CEtAKdYpsO2ij8XhMQmhkF6cN178ijxQeiwtnImt1UTuQ9a6ahVEbDHRBYu05u4WmQhsuD4j0R9w_OKcY0=w215-h322-s-no?authuser=1")
+            if host.endswith("navyteams.com"):
+                # Verified cover URL supplied for this specific story.
+                if "/truyen/khong-con-la-ban-thuo-nho/" in urlparse(base).path + "/":
+                    cover="https://img.ridicdn.net/cover/2336051899/xxlarge?dpi=xxhdpi"
+                else:
+                    cover=None
+                # The chapter page can advertise a website icon as og:image.
+                # Prefer the actual book cover, never a favicon or generic site icon.
+                candidates=[]
+                for node in soup.select(".book-cover img,.story-cover img,.novel-cover img,.cover img,.book-info img,.novel-info img,img[src*='ridicdn.net/cover/'],img[data-src*='ridicdn.net/cover/']"):
+                    raw=node.get("data-src") or node.get("data-original") or node.get("src") or ""
+                    if raw:candidates.append(raw)
+                candidates.extend([meta("meta[property='og:image']"),meta("meta[name='twitter:image']")])
+                def is_book_cover(raw):
+                    u=urlparse(urljoin(base,raw))
+                    p=u.path.lower()
+                    return bool(raw) and not any(x in p for x in ("favicon","/icon","logo","avatar","apple-touch")) and (
+                        "ridicdn.net/cover/" in (u.netloc+p) or
+                        any(x in p for x in ("/cover/","/covers/","book-cover","novel-cover"))
+                    )
+                if not cover:
+                    cover=next((image_url(base,raw) for raw in candidates if is_book_cover(raw)),None)
+            else:
+                cover_tag=soup.select_one(".book-cover img,.book img,.story-cover img,.cover img,.info img,meta[property='og:image'],meta[name='twitter:image']")
+                cover_url=(cover_tag.get("data-src") or cover_tag.get("data-original") or cover_tag.get("data-lazy-src") or cover_tag.get("src") or cover_tag.get("content") or "") if cover_tag else ""
+                inkitt_cover=soup.select_one("div.story-horizontal-cover__front") if host.endswith("inkitt.com") else None
+                cover_css=inkitt_cover.get("style","") if inkitt_cover else ""
+                cover_match=re.search(r"url\(\s*['\"]?([^'\"\)]+)",cover_css,re.I)
+                cover=image_url(base,(wattpad_data or {}).get('cover') or (cover_match.group(1) if cover_match else "") or meta("meta[property='og:image']") or meta("meta[name='twitter:image']") or cover_url)
+                if not cover:
+                    raw=meta("meta[property='og:image']") or meta("meta[name='twitter:image']")
+                    cover=image_url(base,raw) if raw else None
+            if host.endswith("navyteams.com"):
+                # Read the actual <img src> used by NavyTeams story avatars.
+                # Do not hardcode a cover for one particular story.
+                avatar=soup.select_one('.info-cover img[src],.info-cover img[data-src],.info-cover img[data-original],img[src*="/storage/story_avatars/"],img[data-src*="/storage/story_avatars/"],img[data-original*="/storage/story_avatars/"]')
+                if avatar:
+                    raw=avatar.get("src") or avatar.get("data-src") or avatar.get("data-original") or ""
+                    candidate=image_url(base,raw)
+                    if candidate:cover=candidate
+            if host.endswith("navyteams.com"):
+                # NavyTeams tags are not a comma-separated metadata dump:
+                # generic .tags may contain popularity counts, authors and repeated tags.
+                raw_tags=[a.get_text(" ",strip=True) for a in soup.select("#storyInfo .tag a,#storyInfo .tags a,.story-info .tag a,.story-info .tags a,.novel-info .tag a,.novel-info .tags a") if a.get_text(" ",strip=True)]
+                categories=[]
+                seen_categories=set()
+                for tag in raw_tags:
+                    tag=tag.strip()
+                    if not tag or len(tag)>65 or re.fullmatch(r"[\\d\\s,.]+",tag):continue
+                    key=tag.casefold()
+                    if key not in seen_categories:
+                        seen_categories.add(key)
+                        categories.append(tag)
+            else:
+                categories=[a.get_text(" ",strip=True) for a in soup.select(".tag a,.tags a,.genres a,.genre a,.book-tags a,[itemprop=genre] a") if a.get_text(" ",strip=True)]
+                if not categories:
+                    raw=label("[itemprop=genre],.genres,.genre,.book-tags")
+                    categories=[x.strip() for x in raw.split(",") if x.strip()]
+            chapters=list(found.values())
+            def order(x):
+                label=x["title"].strip()
+                # Extras belong after the numbered main story chapters.
+                is_extra=bool(re.search(r"ngoại\s*truyện|ngoai[-_\s]*truyen|extra|番外",label,re.I))
+                match=re.search(r"(?:chương|chuong|chapter|chap|ngoại\s*truyện|ngoai[-_\s]*truyen|extra)[^0-9]{0,20}(\d+)",label,re.I)
+                if not match:
+                    match=re.search(r"(?:chuong|chapter|chap|ngoai-truyen|extra)[-_]?(\d+)",urlparse(x["url"]).path,re.I)
+                number=int(match.group(1)) if match else 10**9
+                return (1 if is_extra else 0,number)
+            if not (wattpad_data and wattpad_data['parts']):
+                # NavyTeams lists newest first; stable sorting restores chapter 1 -> N -> extras.
+                chapters.sort(key=order)
+            return {"title":title[:200],"author":author.get_text(" ",strip=True)[:120] if author else "","description":description[:15000],"cover":cover,"categories":categories[:30],"chapters":chapters[:1000],"count":len(chapters),"truncated":len(pages)>12 or len(chapters)>1000}
+    except httpx.HTTPStatusError as exc:
+        status=exc.response.status_code
+        raise HTTPException(502,f"Máy chủ nguồn trả HTTP {status}. "+("Website có thể đang chặn truy cập từ Render." if status in (403,429,503) else "Không thể tải trang truyện.")) from exc
+    except httpx.ConnectError as exc:
+        raise HTTPException(502,"Không kết nối được tới máy chủ nguồn từ Render (lỗi DNS, TLS hoặc kết nối mạng).") from exc
+    except httpx.TimeoutException as exc:
+        raise HTTPException(504,"Máy chủ nguồn phản hồi quá chậm hoặc không kết nối được từ Render (NavyTeams: tối đa 45 giây; các nguồn khác: 20 giây).") from exc
+    except httpx.HTTPError as exc:
+        raise HTTPException(502,f"Không thể tải nguồn: {type(exc).__name__}.") from exc
+
+@app.post("/batch")
+async def batch(req:BatchRequest):
+    source=check_selected_source(req.url,req.source)
+    if req.start<1 or req.end<req.start or req.end-req.start>=20:
+        raise HTTPException(400,"Mỗi yêu cầu kỹ thuật hỗ trợ tối đa 20 chương; website tự chia đợt.")
+    discovery=None
+    if req.chapters is not None:
+        chosen=req.chapters
+        if len(chosen)>20:raise HTTPException(400,"Mỗi đợt tối đa 20 chương.")
+        for item in chosen:
+            if not normalized_url(req.url,item.get("url","")):raise HTTPException(400,"URL chương không hợp lệ.")
+    else:
+        discovery=await discover(ReadRequest(url=req.url))
+        chosen=discovery["chapters"][req.start-1:req.end]
+    if not chosen:raise HTTPException(404,"Không tìm thấy chương.")
+    is_wattpad=(urlparse(req.url).hostname or '').lower().endswith('wattpad.com')
+    semaphore=asyncio.Semaphore(8 if not is_wattpad else 5)
+    async with httpx.AsyncClient(timeout=20,follow_redirects=False,limits=httpx.Limits(max_connections=10),headers={"User-Agent":"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36","Accept":"text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8","Accept-Language":"en-US,en;q=0.9"}) as client:
+        archive_url=req.url
+        if is_wattpad and not re.search(r"/story/\\d+",urlparse(req.url).path):
+            info=await wattpad_story_metadata(client,req.url)
+            if info and info.get("story_url"):archive_url=info["story_url"]
+        archive=await wattpad_story_archive(client,archive_url) if is_wattpad else None
+        async def fetch_one(item):
+            async with semaphore:
+                try:
+                    if archive:
+                        match=re.match(r'/([0-9]{6,})',urlparse(item['url']).path)
+                        part=archive.get(match.group(1)) if match else None
+                        if part is not None:
+                            text,imgs=wattpad_story_text(part,item['url'],req.include_images)
+                            if (text or imgs):return {'title':item['title'],'url':item['url'],'content':text,'images':imgs}
+                    if is_wattpad and item.get("text_url"):
+                        try:
+                            direct=await client.get(item["text_url"],timeout=25)
+                            if direct.status_code==200 and len(direct.content)<3000000:
+                                text,imgs=wattpad_story_text(direct.text,item["url"],req.include_images)
+                                if (text or imgs):
+                                    return {"title":item["title"],"url":item["url"],"content":text,"images":imgs}
+                        except httpx.HTTPError:
+                            pass
+                    is_luot=(urlparse(item["url"]).hostname or "").lower().endswith("luotnovel1.site")
+                    try:
+                        soup,base=await get_page(client,item["url"])
+                        content,images=chapter_body(soup,base)
+                    except (httpx.HTTPError,HTTPException):
+                        if not is_luot:
+                            raise
+                        content,images="",[]
+                        base=item["url"]
+                    if is_luot and not content:
+                        try:
+                            rendered=await _render_page(item["url"])
+                            content=rendered.get("content","")
+                        except HTTPException:
+                            pass
+                    if is_luot and not content:
+                        return {"title":item["title"],"url":item["url"],"content":"","images":[],"error":"LuotNovel: không đọc được #textReadingArea qua HTML hoặc trình duyệt máy chủ."}
+                    if is_wattpad:
+                        # Public chapter HTML is a second source of inline illustrations.
+                        extra_text,extra_images=wattpad_story_text(str(soup),base,req.include_images)
+                        if not content:content=extra_text
+                        content=wattpad_clean_text(content)
+                        # Wattpad reader HTML can contain author/cover elements even
+                        # inside broad layout nodes. Only trust paragraph images
+                        # extracted by the Wattpad-specific body parser.
+                        images=extra_images if req.include_images else []
+                    if is_wattpad and not content and not images:
+                        return {"title":item["title"],"url":item["url"],"content":"","images":[],"error":"Wattpad không cung cấp nội dung chương qua HTML hoặc bản ZIP công khai; chương có thể bị khóa hoặc nguồn từ chối máy chủ."}
+                    if not content and (urlparse(base).hostname or "").lower().endswith("navyteams.com"):
+                        return {"title":item["title"],"url":item["url"],"content":"","images":[],"error":"NavyTeams: trang chương không có nội dung HTML nhận diện được (có thể tải bằng JavaScript hoặc cấu trúc khác)."}
+                    if not content and not images and (urlparse(base).hostname or "").lower().endswith("truyenfull.live"):
+                        return {"title":item["title"],"url":item["url"],"content":"","images":[],"error":"Truyenfull: không tìm thấy nội dung chương trong HTML. Có thể trang bị chặn hoặc cấu trúc đã thay đổi."}
+                    resolved=[image_url(base,x) for x in images] if req.include_images else []
+                    return {"title":item["title"],"url":item["url"],"content":content,"images":[x for x in resolved if x]}
+                except (httpx.HTTPError,HTTPException) as exc:
+                    if isinstance(exc,httpx.HTTPStatusError):
+                        reason=f"Nguồn trả HTTP {exc.response.status_code}"
+                    elif isinstance(exc,HTTPException):
+                        reason=f"Nguồn: {exc.detail}"
+                    elif isinstance(exc,httpx.TimeoutException):
+                        reason="Nguồn phản hồi quá thời gian"
+                    else:
+                        reason=f"Lỗi kết nối nguồn ({type(exc).__name__})"
+                    return {"title":item["title"],"url":item["url"],"content":"","images":[],"error":reason}
+        result=await asyncio.gather(*(fetch_one(item) for item in chosen))
+    return {"title":discovery["title"] if discovery else "","author":discovery["author"] if discovery else "","chapters":result,"count":len(result)}
+
+@app.post("/image")
+async def image(req:ReadRequest):
+    url=image_url(req.url,req.url)
+    if not url:raise HTTPException(400,"URL ảnh HTTPS không hợp lệ.")
+    u=urlparse(url)
+    if not await public_image_host(u.hostname):raise HTTPException(400,"Máy chủ ảnh không an toàn hoặc không truy cập được.")
+    headers={"User-Agent":"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/131.0.0.0 Safari/537.36","Referer":f"https://{u.hostname}/","Accept":"image/png,image/jpeg,image/webp,*/*"}
+    candidates=[url]
+    if u.hostname=="static.truyenfull.live" and u.path.startswith("/cover/"):
+        # The CDN may require the source site's Referer, and may redirect to
+        # another image host. Try the original URL first, then image relays.
+        headers["Referer"]="https://truyenfull.live/"
+        from urllib.parse import quote
+        candidates.extend([
+            "https://wsrv.nl/?url="+quote(url,safe=""),
+            "https://images.weserv.nl/?url="+quote(url,safe=""),
+        ])
+    # A public image CDN can fetch the exact same NavyTeams avatar when Render
+    # cannot resolve/reach navyteams.com. Never use this for arbitrary URLs.
+    if u.hostname in ("navyteams.com","www.navyteams.com") and u.path.startswith("/storage/story_avatars/"):
+        from urllib.parse import quote
+        candidates.append("https://wsrv.nl/?url="+quote(url,safe=""))
+        candidates.append("https://i0.wp.com/"+u.hostname+u.path)
+    # WordPress.com hosts the supplied cover on its public uploads CDN.
+    # Try WordPress's own image CDN if direct origin access fails on Render.
+    if u.hostname=="tichvulam.wordpress.com" and u.path.startswith("/wp-content/uploads/"):
+        from urllib.parse import quote
+        candidates.append("https://i0.wp.com/"+u.hostname+u.path)
+        candidates.append("https://wsrv.nl/?url="+quote(url,safe=""))
+    # WordPress blogs use multiple public upload hosts (files.wordpress.com,
+    # i0.wp.com, and custom wordpress.com subdomains).
+    if (u.hostname or "").endswith(".wordpress.com") and "/wp-content/uploads/" in u.path:
+        from urllib.parse import quote
+        candidates.extend([
+            "https://i0.wp.com/"+u.hostname+u.path,
+            "https://wsrv.nl/?url="+quote(url,safe=""),
+        ])
+    if (u.hostname or "").endswith(".wordpress.com") and "/wp-content/uploads/" in u.path:
+        blog=u.hostname.removesuffix(".wordpress.com")
+        uploads=u.path.split("/wp-content/uploads/",1)[1]
+        files_url="https://"+blog+".files.wordpress.com/"+uploads
+        candidates.extend([files_url,"https://i0.wp.com/"+blog+".files.wordpress.com/"+uploads,"https://i1.wp.com/"+u.hostname+u.path,"https://i2.wp.com/"+u.hostname+u.path,"https://wsrv.nl/?url="+__import__("urllib.parse",fromlist=["quote"]).quote(files_url,safe="")])
+    if (u.hostname or "").endswith(".files.wordpress.com"):
+        from urllib.parse import quote
+        candidates.extend([
+            "https://i0.wp.com/"+u.hostname+u.path,
+            "https://wsrv.nl/?url="+quote(url,safe=""),
+        ])
+    # Truyenfull cover photos are hosted by Google Photos. Render can fail to
+    # reach lh3.googleusercontent.com directly; try a public image relay.
+    # Restricted to this Google Photos path, not other websites or sources.
+    if u.hostname=="lh3.googleusercontent.com" and u.path.startswith("/pw/"):
+        from urllib.parse import quote
+        # Keep the actual image path and query parameters (including authuser=1).
+        # Earlier regex was double-escaped and appended sizes after the query.
+        from urllib.parse import urlencode
+        root=re.sub(r"=w\d+-h\d+(?:-[a-z-]+)?$|=s\d+$","",u.path)
+        variants=[
+            url,
+            urlunparse((u.scheme,u.netloc,root+"=w215-h322-s-no","",u.query,"")),
+            urlunparse((u.scheme,u.netloc,root+"=s800","",u.query,"")),
+        ]
+        relay=[ "https://wsrv.nl/?url="+quote(v,safe="") for v in variants ]
+        candidates=list(dict.fromkeys([*variants,*relay]))
+    async with httpx.AsyncClient(timeout=7 if u.hostname=="lh3.googleusercontent.com" and u.path.startswith("/pw/") else 22,follow_redirects=True,trust_env=False) as client:
+        last_error=None
+        for candidate in candidates:
+            for attempt in range(1 if u.hostname=="lh3.googleusercontent.com" and u.path.startswith("/pw/") else 2):
+                try:
+                    candidate_host=(urlparse(candidate).hostname or "").lower()
+                    request_headers=headers if candidate_host==u.hostname else {"User-Agent":headers["User-Agent"],"Accept":headers["Accept"]}
+                    r=await client.get(candidate,headers=request_headers)
+                    if r.status_code in (429,500,502,503,504) and attempt==0 and u.hostname!="lh3.googleusercontent.com":
+                        await asyncio.sleep(.7)
+                        continue
+                    r.raise_for_status()
+                    data=r.content
+                    mime=""
+                    if data.startswith(b"\\x89PNG\\r\\n\\x1a\\n"):mime="image/png"
+                    elif data.startswith(b"\\xff\\xd8\\xff"):mime="image/jpeg"
+                    elif data.startswith(b"RIFF") and data[8:12]==b"WEBP":mime="image/webp"
+                    if not mime or len(data)>5_000_000:raise ValueError("Ảnh không hợp lệ hoặc quá 5MB")
+                    return Response(data,media_type=mime,headers={"Cache-Control":"public, max-age=3600"})
+                except (httpx.HTTPError,ValueError) as exc:
+                    last_error=exc
+                    if attempt==0:await asyncio.sleep(.4)
+        raise HTTPException(502,"Không tải được ảnh bìa từ nguồn và các máy chủ ảnh dự phòng.") from last_error
+
+# Convert the actual generated Word document to a readable, Unicode PDF.
+class ConvertWordRequest(BaseModel):
+    docx_base64: str
+
+@app.post("/convert-docx-pdf")
+async def convert_docx_pdf(req: ConvertWordRequest):
+    import base64
+    import io
+    import os
+    from xml.sax.saxutils import escape
+    from docx import Document
+    from docx.oxml.ns import qn
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Image, KeepTogether
+    from reportlab.lib.styles import ParagraphStyle
+    from reportlab.lib.enums import TA_CENTER, TA_LEFT
+    from reportlab.lib.pagesizes import A4
+    from reportlab.pdfbase import pdfmetrics
+    from reportlab.pdfbase.ttfonts import TTFont
+    from matplotlib import font_manager
+    try:
+        data=base64.b64decode(req.docx_base64,validate=True)
+        if len(data)>18_000_000:raise HTTPException(413,"File Word quá lớn.")
+        doc=Document(io.BytesIO(data))
+        regular=font_manager.findfont(font_manager.FontProperties(family="DejaVu Sans"))
+        bold=font_manager.findfont(font_manager.FontProperties(family="DejaVu Sans",weight="bold"))
+        if "ReedttUnicode" not in pdfmetrics.getRegisteredFontNames():
+            pdfmetrics.registerFont(TTFont("ReedttUnicode",regular))
+            pdfmetrics.registerFont(TTFont("ReedttUnicodeBold",bold))
+            pdfmetrics.registerFontFamily("ReedttUnicode",normal="ReedttUnicode",bold="ReedttUnicodeBold")
+        out=io.BytesIO()
+        pdf=SimpleDocTemplate(out,pagesize=A4,leftMargin=36,rightMargin=36,topMargin=36,bottomMargin=36,title=doc.core_properties.title or "Reedtt")
+        styles={
+          "Normal":ParagraphStyle("Body",fontName="ReedttUnicode",fontSize=11,leading=16.5,spaceAfter=8,wordWrap="CJK"),
+          "Heading2":ParagraphStyle("Chapter",fontName="ReedttUnicodeBold",fontSize=11,leading=16.5,spaceBefore=12,spaceAfter=6,keepWithNext=True),
+          "StoryTitle":ParagraphStyle("Title",fontName="ReedttUnicodeBold",fontSize=25,leading=31,textColor="#1F3864",alignment=TA_CENTER,spaceAfter=12,keepWithNext=True)
+        }
+        flow=[]
+        from docx.oxml.ns import qn
+        from PIL import Image as PILImage
+        for p in doc.paragraphs:
+            kind=p.style.name if p.style else "Normal"
+            if kind in ("Heading 2","Heading2"):kind="Heading2"
+            if kind not in styles:kind="Normal"
+            txt=p.text.strip()
+            if txt:
+                flow.append(Paragraph(escape(txt),styles[kind]))
+            for run in p.runs:
+                for blip in run._element.xpath(".//a:blip"):
+                    rid=blip.get(qn("r:embed"))
+                    if not rid or rid not in p.part.related_parts:continue
+                    raw=p.part.related_parts[rid].blob
+                    try:
+                        picture=PILImage.open(io.BytesIO(raw))
+                        w,h=picture.size
+                        ratio=min(1,450/max(w,1),540/max(h,1))
+                        flow.append(Image(io.BytesIO(raw),width=w*ratio,height=h*ratio))
+                        flow.append(Spacer(1,8))
+                    except Exception:continue
+        if not flow:raise HTTPException(400,"File Word không có nội dung.")
+        pdf.build(flow)
+        return Response(content=out.getvalue(),media_type="application/pdf",headers={"Content-Disposition":'attachment; filename="reedtt.pdf"'})
+    except HTTPException:raise
+    except Exception as exc:raise HTTPException(422,"Không thể chuyển Word thành PDF: "+str(exc)[:180])
+
+# Rendered-page extraction for JavaScript-driven, public story pages.
+_render_browser_lock = asyncio.Lock()
+_render_browser_ready = False
+
+async def _render_browser():
+    global _render_browser_ready
+    from playwright.async_api import async_playwright
+    async with _render_browser_lock:
+        if not _render_browser_ready:
+            import subprocess, sys
+            # Render's existing build command installs Python packages only.
+            # Install headless Chromium once into the service's writable cache.
+            result = await asyncio.to_thread(
+                subprocess.run, [sys.executable, "-m", "playwright", "install", "chromium"],
+                capture_output=True, text=True, timeout=180
+            )
+            if result.returncode:
+                raise HTTPException(503, "Không thể cài Chromium trên Render: " + result.stderr[-350:])
+            _render_browser_ready = True
+    return async_playwright()
+
+async def _render_page(url):
+    target = normalized_url(url, url)
+    if not target or not (urlparse(target).hostname or "").endswith(("giatocvuongtai.com","luotnovel1.site")):
+        raise HTTPException(400, "Chỉ hỗ trợ đường dẫn HTTPS của Gia Tộc Vượng Tài.")
+    try:
+        async with await _render_browser() as playwright:
+            browser = await playwright.chromium.launch(headless=True, args=["--no-sandbox", "--disable-dev-shm-usage"])
+            try:
+                context = await browser.new_context(viewport={"width": 1280, "height": 900}, locale="vi-VN")
+                page = await context.new_page()
+                await page.goto(target, wait_until="domcontentloaded", timeout=35000)
+                await page.wait_for_timeout(1800)
+                for _ in range(8):
+                    await page.evaluate("window.scrollBy(0, Math.max(650, window.innerHeight))")
+                    await page.wait_for_timeout(500)
+                if (urlparse(target).hostname or "").endswith("giatocvuongtai.com"):
+                    try:
+                        picker=page.locator('button[aria-label="Chọn chương"],.reader-demo-footer-btn--chapter').first
+                        if await picker.count():
+                            await picker.click(timeout=4000)
+                            await page.wait_for_timeout(900)
+                    except Exception:
+                        pass
+                data = await page.evaluate("""() => {
+                  const title = document.querySelector('h1')?.textContent?.trim() || document.querySelector("meta[property='og:title']")?.content || '';
+                  const links = [...document.querySelectorAll('a[href]')].map(a => ({
+                    title: (a.querySelector('strong,p')?.textContent || a.textContent || '').trim(),
+                    url: a.href
+                  })).filter(x => {try {
+                    const u=new URL(x.url);
+                    return (u.pathname.replace(/\\/$/,'')==='/reader' && u.searchParams.has('storyId') && u.searchParams.has('chapter')) || (u.hostname.endsWith('luotnovel1.site') && /(?:chuong|chapter|chap)[-_ /]?\\d+|\\/\\d+(?:\\/|$)/i.test(u.pathname));
+                  } catch {return false;}});
+                  const body=document.querySelector('#textReadingArea,.reader-demo-body,.reader-content,.chapter-content,#chapter-content,[data-chapter-content]');
+                  const ps=body?[...body.querySelectorAll('.chapter-paragraph')]:[];
+                  const fallback=body&&!ps.length?[...body.querySelectorAll('p.reader-demo-para,p')]:[];
+                  const content=(ps.length?ps:fallback).map(p=>p.textContent.trim()).filter(Boolean).join('\\n\\n');
+                  return {title,links,content};
+                }""")
+                return data
+            finally:
+                await browser.close()
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(502, "Playwright không thể đọc trang: " + str(exc)[:250]) from exc
+
+def _gv_story_from_props(html_text):
+    import html as html_lib
+    import json as json_lib
+    from bs4 import BeautifulSoup
+    soup = BeautifulSoup(html_text, "html.parser")
+    island = soup.select_one('astro-island[component-url*="StoryDetailShell"][props]')
+    if not island:
+        return None
+    try:
+        props = json_lib.loads(html_lib.unescape(island.get("props", "")))
+        def unwrap(value):
+            if isinstance(value, list) and len(value) == 2 and isinstance(value[0], int):
+                return unwrap(value[1])
+            if isinstance(value, dict):
+                return {k: unwrap(v) for k, v in value.items()}
+            if isinstance(value, list):
+                return [unwrap(v) for v in value]
+            return value
+        return unwrap(props.get("initialStory"))
+    except (ValueError, TypeError):
+        return None
+
+@app.post("/render-discover")
+async def render_discover(req: ReadRequest):
+    from urllib.parse import quote
+    if (urlparse(req.url).hostname or "").lower().endswith("luotnovel1.site"):
+        return await luotnovel_discover(req.url)
+    if (urlparse(req.url).hostname or "").endswith("giatocvuongtai.com") and urlparse(req.url).path.startswith("/stories/"):
+        import httpx
+        try:
+            async with httpx.AsyncClient(follow_redirects=True, timeout=25) as client:
+                response = await client.get(req.url, headers={"User-Agent": "Mozilla/5.0", "Accept": "text/html"})
+                response.raise_for_status()
+            story = _gv_story_from_props(response.text)
+            if story and story.get("id"):
+                chapters = []
+                for item in sorted(story.get("chapters") or [], key=lambda x: x.get("order_number", 0)):
+                    if not item.get("id") or not item.get("is_published", True) or item.get("is_password_protected"):
+                        continue
+                    link = "https://giatocvuongtai.com/reader/?storyId=" + quote(str(story["id"])) + "&chapter=" + quote(str(item["id"]))
+                    chapters.append({"title": item.get("title") or "Chương", "url": link})
+                return {"title": story.get("title", ""), "author": (story.get("author") or {}).get("name", ""), "chapters": chapters, "count": len(chapters), "cover": story.get("cover_url", ""), "description": story.get("summary", "")}
+        except Exception:
+            pass
+    data = await _render_page(req.url)
+    story_id = __import__("urllib.parse", fromlist=["parse_qs"]).parse_qs(urlparse(req.url).query).get("storyId", [None])[0]
+    seen = set()
+    chapters = []
+    for item in data.get("links", []):
+        link = normalized_url(req.url, item.get("url", ""))
+        if not link or link in seen:
+            continue
+        if story_id and __import__("urllib.parse", fromlist=["parse_qs"]).parse_qs(urlparse(link).query).get("storyId", [None])[0] != story_id:
+            continue
+        seen.add(link)
+        chapters.append({"title":item.get("title") or f"Chương {len(chapters)+1}", "url":link})
+    if not chapters and "/reader" in urlparse(req.url).path and data.get("content"):
+        chapters.append({"title":data.get("title") or "Chương đã chọn", "url":req.url})
+    return {"title":data.get("title", ""), "author":"", "chapters":chapters, "count":len(chapters)}
+
+@app.post("/render-batch")
+async def render_batch(req: BatchRequest):
+    if req.chapters is None or len(req.chapters)>10:
+        raise HTTPException(400, "Mỗi đợt tối đa 10 chương.")
+    chapters=[]
+    for item in req.chapters:
+        url=normalized_url(req.url, item.get("url", ""))
+        if not url:
+            raise HTTPException(400, "URL chương không hợp lệ.")
+        try:
+            data=await _render_page(url)
+            content=data.get("content", "")
+            chapters.append({"title":item.get("title",""),"url":url,"content":content,"images":[],
+                             **({"error":"Trang không hiển thị văn bản có thể trích xuất; OCR ảnh chưa được bật."} if not content else {})})
+        except HTTPException as exc:
+            chapters.append({"title":item.get("title",""),"url":url,"content":"","images":[],"error":str(exc.detail)})
+    return {"chapters":chapters,"count":len(chapters)}
+
+async def luotnovel_discover(url):
+    from urllib.parse import parse_qs
+    found={}
+    async with httpx.AsyncClient(timeout=12,follow_redirects=False,headers={"User-Agent":"Mozilla/5.0","Accept-Language":"vi-VN,vi;q=0.9"}) as client:
+        soup,base=await get_page(client,url)
+        title=(soup.select_one("meta[property='og:title']") or {}).get("content","") or (soup.h1.get_text(" ",strip=True) if soup.h1 else "")
+        story_path=urlparse(base).path
+        def collect(doc,page_url):
+            for a in doc.select("a[href]"):
+                link=normalized_url(page_url,a.get("href",""))
+                if not link or urlparse(link).path.rstrip("/")==story_path.rstrip("/"):continue
+                if (urlparse(link).hostname or "").lower()!=(urlparse(base).hostname or "").lower():continue
+                label=a.get_text(" ",strip=True)
+                path=urlparse(link).path
+                if not (re.search(r"(?:chuong|chapter|chap)[-_ /]?\d+|/\d+(?:/|$)",path,re.I) or re.search(r"(?:chương|chuong|chapter)\s*\d+",label,re.I)):continue
+                found[link]={"title":label[:180] or "Chương "+str(len(found)+1),"url":link}
+        collect(soup,base)
+        pages=page_links(soup,base,story_path)
+        for link in pages[:4]:
+            try:
+                sub,_=await get_page(client,link)
+                collect(sub,link)
+            except (HTTPException,httpx.HTTPError):pass
+    if not found:
+        # LuotNovel loads its table of contents asynchronously into #nt_listchapter.
+        try:
+            async with await _render_browser() as playwright:
+                browser=await playwright.chromium.launch(headless=True,args=["--no-sandbox","--disable-dev-shm-usage"])
+                try:
+                    page=await browser.new_page(locale="vi-VN")
+                    await page.goto(url,wait_until="domcontentloaded",timeout=35000)
+                    try:
+                        await page.locator("#nt_listchapter a[href]").first.wait_for(timeout=5500)
+                    except Exception:
+                        pass
+                    for _ in range(5):
+                        await page.evaluate("window.scrollTo(0,document.body.scrollHeight)")
+                        await page.wait_for_timeout(700)
+                    rendered_html=await page.content()
+                    rendered_soup=BeautifulSoup(rendered_html,"html.parser")
+                    collect(rendered_soup,url)
+                finally:
+                    await browser.close()
+        except Exception:
+            pass
+    if not found:
+        try:
+            rendered=await _render_page(url)
+            for item in rendered.get("links",[]):
+                link=normalized_url(url,item.get("url",""))
+                if link:found[link]={"title":item.get("title") or "Chương "+str(len(found)+1),"url":link}
+        except HTTPException:
+            pass
+    cover_node=soup.select_one('meta[property="og:image"]') or soup.select_one('meta[property="og:image:url"]')
+    cover=image_url(base,cover_node.get("content","")) if cover_node else ""
+    description_node=soup.select_one('meta[name="description"]')
+    description=description_node.get("content","") if description_node else ""
+    return {"title":title,"author":"","cover":cover,"description":description,"chapters":list(found.values()),"count":len(found)}
+
+
+
+def inkitt_html_metadata(soup, story_url):
+    import json
+    match=re.search(r"/stories/(\d+)",urlparse(story_url).path)
+    if not match:
+        raise HTTPException(400,"URL Inkitt không hợp lệ.")
+    story_id=match.group(1)
+    base=f"https://www.inkitt.com/stories/{story_id}"
+    book={}
+    for node in soup.select('script[type="application/ld+json"]'):
+        try:
+            item=json.loads(node.string or node.get_text())
+            for obj in (item if isinstance(item,list) else [item]):
+                if isinstance(obj,dict) and obj.get("@type")=="Book":
+                    book=obj
+                    break
+        except (ValueError,TypeError):
+            continue
+    chapter_data=[]
+    for node in soup.select('script[data-component-name="StoryChaptersList"]'):
+        try:
+            item=json.loads(node.string or node.get_text())
+            if isinstance(item.get("chapters"),list):
+                chapter_data=item["chapters"]
+                break
+        except (ValueError,TypeError,AttributeError):
+            continue
+    chapters=[]
+    for ch in chapter_data[:1000]:
+        if not isinstance(ch,dict):
+            continue
+        number=ch.get("number")
+        if not str(number).isdigit() or int(number)<1:
+            continue
+        path=ch.get("path") or f"/stories/{story_id}/chapters/{number}"
+        link=normalized_url(base,path)
+        if link and re.fullmatch(r"/stories/"+story_id+r"/chapters/\d+",urlparse(link).path):
+            chapters.append({"title":str(ch.get("name") or f"Chương {number}")[:180],"url":link})
+    author=book.get("author") or {}
+    image=book.get("image") or {}
+    summary_node=soup.select_one(".story-summary")
+    summary=summary_node.get_text("\n",strip=True) if summary_node else book.get("description") or ""
+    cover=image.get("url","") if isinstance(image,dict) else image
+    if not cover:
+        image_node=soup.select_one('meta[property="og:image"]')
+        cover=image_node.get("content","") if image_node else ""
+    title=book.get("name") or ""
+    if not title:
+        title_node=soup.select_one('meta[property="og:title"]')
+        title=title_node.get("content","") if title_node else ""
+    genres=book.get("genre") or []
+    return {"title":str(title)[:200],"author":str(author.get("name","") if isinstance(author,dict) else author)[:120],"description":str(summary)[:15000],"cover":image_url(base,cover) if isinstance(cover,str) and cover else None,"categories":genres if isinstance(genres,list) else [genres],"chapters":chapters,"count":len(chapters),"truncated":len(chapter_data)>1000}
+
+async def inkitt_info(client, story_url):
+    """Use Inkitt's public story metadata endpoint, as lightnovel-crawler does."""
+    match=re.search(r"/stories/(\d+)",urlparse(story_url).path)
+    if not match:
+        return None
+    story_id=match.group(1)
+    api_url=f"https://www.inkitt.com/api/stories/{story_id}"
+    try:
+        response=await client.get(api_url,headers={"Accept":"application/json","Referer":story_url})
+        if response.status_code in (401,403,429):
+            raise HTTPException(502,f"Inkitt API từ chối truy cập (HTTP {response.status_code}).")
+        response.raise_for_status()
+        data=response.json()
+    except httpx.HTTPError as exc:
+        raise HTTPException(502,f"Không tải được dữ liệu truyện từ Inkitt API: {type(exc).__name__}") from exc
+    except ValueError as exc:
+        raise HTTPException(502,"Inkitt API không trả về JSON hợp lệ.") from exc
+    if not isinstance(data,dict) or not isinstance(data.get("chapters"),list):
+        raise HTTPException(502,"Inkitt API không có danh sách chương công khai.")
+    base=f"https://www.inkitt.com/stories/{story_id}"
+    chapters=[]
+    for entry in data["chapters"][:1000]:
+        if not isinstance(entry,dict):
+            continue
+        number=entry.get("chapter_number")
+        if not isinstance(number,int) and not (isinstance(number,str) and number.isdigit()):
+            continue
+        number=int(number)
+        if number<1:
+            continue
+        name=str(entry.get("name") or f"Chương {number}").strip()
+        chapters.append({"title":f"{number}. {name}"[:180],"url":f"{base}/chapters/{number}"})
+    author=data.get("user") or {}
+    cover=data.get("vertical_cover") or {}
+    # Inkitt descriptions can be HTML and may be stored under several summary fields.
+    summary=data.get("summary") or data.get("description") or data.get("synopsis") or ""
+    if isinstance(summary,dict):
+        summary=summary.get("text") or summary.get("content") or ""
+    if isinstance(summary,str):
+        summary_soup=BeautifulSoup(summary,"html.parser")
+        for br in summary_soup.select("br"):br.replace_with("\n")
+        for p in summary_soup.select("p"):p.append("\n\n")
+        summary=summary_soup.get_text("",strip=False)
+        summary=re.sub(r"\n{3,}","\n\n",summary).strip()
+    else:
+        summary=""
+    raw_genres=data.get("genres") or data.get("categories") or []
+    if not isinstance(raw_genres,list):raw_genres=[]
+    categories=[]
+    for genre in raw_genres:
+        name=genre.get("name") or genre.get("title") if isinstance(genre,dict) else genre
+        if isinstance(name,str) and name.strip():categories.append(name.strip())
+    return {
+        "title":str(data.get("title") or "Truyện Inkitt")[:200],
+        "author":str(author.get("name") or "")[:120] if isinstance(author,dict) else "",
+        "description":summary[:15000],
+        "cover":image_url(base,cover.get("url","")) if isinstance(cover,dict) else None,
+        "categories":categories[:30],
+        "chapters":chapters,
+        "count":len(chapters),
+        "truncated":len(data["chapters"])>1000,
+    }
+
+
+@app.post("/discover")
+async def discover(req:ReadRequest):
+    source=check_selected_source(req.url,req.source)
+    u=urlparse(req.url.strip())
+    if u.scheme!="https" or not u.hostname or not allowed(u.hostname.lower()) or u.port not in (None,443):
+        raise HTTPException(400,"Nguồn chưa được hỗ trợ hoặc URL không hợp lệ.")
+    if (u.hostname or "").lower().endswith("wattpad.com"):
+        async with httpx.AsyncClient(timeout=25,follow_redirects=False,headers={"User-Agent":"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36","Accept":"application/json","Accept-Language":"en-US,en;q=0.9"}) as client:
+            info=await wattpad_story_metadata(client,req.url)
+            if info and info.get("parts"):
+                try:
+                    page,_=await get_page(client,info.get("story_url") or req.url)
+                    details=wattpad_html_details(page)
+                    for key in ("description","cover","title","author"):
+                        if details.get(key) and (key=="description" or not info.get(key)):info[key]=details[key]
+                except (HTTPException,httpx.HTTPError,ValueError):pass
+                return {"title":info.get("title") or "", "author":info.get("author") or "", "cover":info.get("cover") or "", "description":info.get("description") or "", "categories":info.get("categories") or [], "chapters":info["parts"],"count":len(info["parts"]),"story_url":info.get("story_url") or req.url}
+        # Wattpad's API can return 403/429 while public story HTML still contains part links.
+        try:
+            async with httpx.AsyncClient(timeout=25,follow_redirects=False,headers={"User-Agent":"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36","Accept":"text/html,application/xhtml+xml","Accept-Language":"vi-VN,vi;q=0.9"}) as client:
+                soup,base=await get_page(client,req.url)
+                chapters=chapter_links(soup,base,urlparse(base).path)
+                if not chapters:
+                    for a in soup.select("a[href]"):
+                        link=normalized_url(base,a.get("href",""))
+                        if link and re.fullmatch(r"/\d{6,}(?:-[^/]*)?/?",urlparse(link).path):
+                            chapters.append({"title":a.get_text(" ",strip=True)[:180] or "Chương "+str(len(chapters)+1),"url":link})
+                if chapters:
+                    chapters=list({item["url"]:item for item in chapters}.values())
+                    return {"title":(soup.select_one("meta[property='og:title']") or {}).get("content",""),"author":"","chapters":chapters,"count":len(chapters)}
+        except (HTTPException,httpx.HTTPError,ValueError):
+            pass
+        raise HTTPException(502,"Wattpad không trả mục lục qua API hoặc HTML công khai từ máy chủ. Kiểm tra quyền truy cập truyện hoặc thử lại sau.")
+    if (u.hostname or "").lower().endswith("luotnovel1.site"):
+        return await luotnovel_discover(req.url)
+    if (u.hostname or "").lower().endswith("inkitt.com") and re.search(r"/stories/\d+",u.path):
+        async with httpx.AsyncClient(timeout=20,follow_redirects=False,headers={"User-Agent":"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36","Accept-Language":"en-US,en;q=0.9"}) as client:
+            try:
+                match=re.search(r"/stories/(\d+)",u.path)
+                page_url=f"https://www.inkitt.com/stories/{match.group(1)}/chapters/1"
+                soup,final_url=await get_page(client,page_url)
+                parsed=inkitt_html_metadata(soup,final_url)
+                if parsed["chapters"]:
+                    return parsed
+            except (HTTPException,httpx.HTTPError,ValueError,AttributeError):
+                pass
+            return await inkitt_info(client,req.url)
+    try:
+        async with httpx.AsyncClient(timeout=45 if u.hostname.lower().endswith("navyteams.com") else 20,follow_redirects=False,headers={"User-Agent":"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36","Accept":"text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8","Accept-Language":"en-US,en;q=0.9"}) as client:
+            soup,base=await get_page(client,req.url)
+            if (urlparse(base).hostname or "").lower().endswith("navyteams.com"):
+                keywords=soup.select_one('meta[name="keywords"]')
+                raw_keywords=(keywords.get("content") or "").strip() if keywords else ""
+                # Chapter pages may prefix the keywords with "Chương N, ".
+                title=re.sub(r"^Chương\\s*\d+\\s*[,，:-]\\s*","",raw_keywords,flags=re.I).strip()
+                if not title or title.casefold()=="navy team":
+                    raise HTTPException(422,"NavyTeams không có tên truyện hợp lệ trong meta keywords.")
+            else:
+                title=(soup.select_one("meta[property='og:title']") or {}).get("content","") or (soup.h1.get_text(" ",strip=True) if soup.h1 else "")
+            author=soup.select_one("span#storyAuthor,[itemprop='author'],.author")
+            author_name=author.get_text(" ",strip=True) if author else ""
+            if (urlparse(base).hostname or "").lower().endswith("navyteams.com"):
+                # Read the story-information panel, not a generic site author label.
+                for panel in soup.select("#storyInfo,.story-info,.story-information,.novel-info,.book-info,.story-detail,.story-details,.info-content,.info-list,.book-details,[id*='storyInfo']"):
+                    for item in panel.select("li,div,p,span,dd,tr"):
+                        line=item.get_text(" ",strip=True)
+                        match=re.match(r"^(?:Tác giả|Author)\s*[:：]\s*(.+)$",line,re.I)
+                        if match and len(line)<180:
+                            author_name=match.group(1).strip()
+                            break
+                    if author_name:break
+                if not author_name:
+                    for node in soup.find_all(string=re.compile(r"^\s*Tác giả\s*[:：]?\s*$",re.I)):
+                        parent=node.parent
+                        if not parent:continue
+                        sibling=parent.find_next_sibling()
+                        if sibling:
+                            candidate=sibling.get_text(" ",strip=True)
+                            if candidate and len(candidate)<120:author_name=candidate;break
+            story_path=urlparse(base).path
+            found={x["url"]:x for x in chapter_links(soup,base,story_path)}
+            wattpad_data=await wattpad_story_metadata(client,base) if (urlparse(base).hostname or '').lower().endswith('wattpad.com') else None
+            if wattpad_data and wattpad_data['parts']:
+                found={part['url']:part for part in wattpad_data['parts']}
+            pages=page_links(soup,base,story_path)
+            # NavyTeams often renders its entire table of contents on the story page.
+            # If the displayed chapter count matches extracted links, skip pagination.
+            if (urlparse(base).hostname or "").lower().endswith("navyteams.com") and found:
+                count_node=soup.find(string=re.compile(r"Danh\\s*Sách\\s*Chương\\s*\\(\\s*\\d+\\s*\\)",re.I))
+                count_match=re.search(r"\\(\\s*(\\d+)\\s*\\)",str(count_node)) if count_node else None
+                if count_match and len(found)>=int(count_match.group(1)):
+                    pages=[]
+            # Bounded pagination discovery to avoid unlimited crawling.
+            async def listing(page):
+                try:
+                    sub,_=await get_page(client,page)
+                    return chapter_links(sub,page,story_path)
+                except (httpx.HTTPError,HTTPException):return []
+            # Do not refetch the same pagination URL or reparse pages when the
+            # main page already exposes the complete chapter list.
+            pending=list(dict.fromkeys(p for p in pages[:30] if p!=base))
+            if pending:
+                limiter=asyncio.Semaphore(8)
+                async def limited_listing(page):
+                    async with limiter:
+                        return await listing(page)
+                for group in await asyncio.gather(*(limited_listing(p) for p in pending)):
+                    for x in group:found[x["url"]]=x
+            def meta(selector):
+                t=soup.select_one(selector)
+                return (t.get("content") or "").strip() if t else ""
+            def label(selector):
+                t=soup.select_one(selector)
+                return t.get_text(" ",strip=True) if t else ""
+            desc_node=soup.select_one("p.story-summary,.desc-text,.book-desc,.story-description,.description,.desc,.intro,.summary,[itemprop=description]")
+            if desc_node:
+                # Keep source paragraph boundaries, explicit BR breaks, and inline sentence flow.
+                for junk in desc_node.select("button,script,style,.read-more,.show-more,.more-btn,.expand,.collapse,[role=button],a"):
+                    junk.decompose()
+                for br in desc_node.select("br"):br.replace_with("\n")
+                for tag in reversed(list(desc_node.select("p,div,section,article,li,blockquote,h1,h2,h3,h4"))):
+                    tag.insert_before("\n\n")
+                    tag.insert_after("\n\n")
+                description=desc_node.get_text("",strip=False)
+                description=description.replace("\r","")
+                description=re.sub(r"[ \t]+"," ",description)
+                description=re.sub(r" *\n *","\n",description)
+                description=re.sub(r"\n{3,}","\n\n",description).strip()
+            else:description=""
+            if (urlparse(base).hostname or "").lower().endswith("wordpress.com"):
+                article=soup.select_one("div.entry-content,div.post-content,div.single-entry-content,.post-entry")
+                if article:
+                    lines=[]
+                    for block in article.select("p,h1,h2,h3,h4"):
+                        if block.find_parent(["nav","aside","footer"]) or block.find_parent(class_=re.compile("comment|widget|related|share",re.I)):continue
+                        # Preserve explicit HTML line breaks within a single WordPress paragraph.
+                        for br in block.select("br"):
+                            br.replace_with("\n")
+                        block_text=block.get_text(" ",strip=False)
+                        block_text=re.sub(r"[ \t]*\n[ \t]*","\n",block_text)
+                        block_text=re.sub(r"[ \t]+"," ",block_text).strip()
+                        if re.search(r"^(?:Chương|Chapter|Chap) +[0-9]+",block_text,re.I):break
+                        if block.select_one("a[href]") and re.search(r"^(?:Chương|Chapter|Chap) +[0-9]+",block_text,re.I):break
+                        if block_text and not block.find_parent(["p","h1","h2","h3","h4"]):lines.append(block_text)
+                    if lines:description="\n\n".join(lines)[:15000]
+            # Some story pages keep the complete synopsis inside the Summary section,
+            # while meta descriptions and collapsed preview nodes contain only excerpts.
+            summary_candidates=[]
+            for selector in ("#summary",".story-summary",".summary-content",".summary-text",".story-description",".book-summary",".novel-summary","[itemprop='description']",".description",".summary"):
+                for node in soup.select(selector):
+                    from bs4 import BeautifulSoup as _BS
+                    copy=_BS(str(node),"html.parser")
+                    for junk in copy.select("script,style,button,.read-more,.show-more,.expand,.collapse,[role=button]"):
+                        junk.decompose()
+                    for br in copy.select("br"):
+                        br.replace_with("\n")
+                    for block in reversed(list(copy.select("p,li,blockquote"))):
+                        block.insert_before("\n\n")
+                        block.insert_after("\n\n")
+                    candidate=copy.get_text("",strip=False)
+                    candidate=re.sub(r"[ \\t]+"," ",candidate)
+                    candidate=re.sub(r" *\n *","\n",candidate)
+                    candidate=re.sub(r"\n{3,}","\n\n",candidate).strip()
+                    if candidate and candidate not in summary_candidates:
+                        summary_candidates.append(candidate)
+            if summary_candidates:
+                best=max(summary_candidates,key=len)
+                if len(best)>len(description):
+                    description=best
+            description=description or meta("meta[name=description]") or meta("meta[property='og:description']")
+            description=re.sub(r"\s*(?:Xem thêm|Thu gọn|Đọc thêm|Show more|Read more)\s*$","",description,flags=re.I).strip()
+            host=(urlparse(base).hostname or "").lower()
+            if host.endswith("navyteams.com"):
+                # Verified cover URL supplied for this specific story.
+                if "/truyen/khong-con-la-ban-thuo-nho/" in urlparse(base).path + "/":
+                    cover="https://img.ridicdn.net/cover/2336051899/xxlarge?dpi=xxhdpi"
+                else:
+                    cover=None
+                # The chapter page can advertise a website icon as og:image.
+                # Prefer the actual book cover, never a favicon or generic site icon.
+                candidates=[]
+                for node in soup.select(".book-cover img,.story-cover img,.novel-cover img,.cover img,.book-info img,.novel-info img,img[src*='ridicdn.net/cover/'],img[data-src*='ridicdn.net/cover/']"):
+                    raw=node.get("data-src") or node.get("data-original") or node.get("src") or ""
+                    if raw:candidates.append(raw)
+                candidates.extend([meta("meta[property='og:image']"),meta("meta[name='twitter:image']")])
+                def is_book_cover(raw):
+                    u=urlparse(urljoin(base,raw))
+                    p=u.path.lower()
+                    return bool(raw) and not any(x in p for x in ("favicon","/icon","logo","avatar","apple-touch")) and (
+                        "ridicdn.net/cover/" in (u.netloc+p) or
+                        any(x in p for x in ("/cover/","/covers/","book-cover","novel-cover"))
+                    )
+                if not cover:
+                    cover=next((image_url(base,raw) for raw in candidates if is_book_cover(raw)),None)
+            else:
+                cover_tag=soup.select_one(".book-cover img,.book img,.story-cover img,.cover img,.info img,meta[property='og:image'],meta[name='twitter:image']")
+                cover_url=(cover_tag.get("data-src") or cover_tag.get("data-original") or cover_tag.get("data-lazy-src") or cover_tag.get("src") or cover_tag.get("content") or "") if cover_tag else ""
+                inkitt_cover=soup.select_one("div.story-horizontal-cover__front") if host.endswith("inkitt.com") else None
+                cover_css=inkitt_cover.get("style","") if inkitt_cover else ""
+                cover_match=re.search(r"url\(\s*['\"]?([^'\"\)]+)",cover_css,re.I)
+                cover=image_url(base,(wattpad_data or {}).get('cover') or (cover_match.group(1) if cover_match else "") or meta("meta[property='og:image']") or meta("meta[name='twitter:image']") or cover_url)
+                if not cover:
+                    raw=meta("meta[property='og:image']") or meta("meta[name='twitter:image']")
+                    cover=image_url(base,raw) if raw else None
+            if host.endswith("navyteams.com"):
+                # Read the actual <img src> used by NavyTeams story avatars.
+                # Do not hardcode a cover for one particular story.
+                avatar=soup.select_one('.info-cover img[src],.info-cover img[data-src],.info-cover img[data-original],img[src*="/storage/story_avatars/"],img[data-src*="/storage/story_avatars/"],img[data-original*="/storage/story_avatars/"]')
+                if avatar:
+                    raw=avatar.get("src") or avatar.get("data-src") or avatar.get("data-original") or ""
+                    candidate=image_url(base,raw)
+                    if candidate:cover=candidate
+            if host.endswith("navyteams.com"):
+                # NavyTeams tags are not a comma-separated metadata dump:
+                # generic .tags may contain popularity counts, authors and repeated tags.
+                raw_tags=[a.get_text(" ",strip=True) for a in soup.select("#storyInfo .tag a,#storyInfo .tags a,.story-info .tag a,.story-info .tags a,.novel-info .tag a,.novel-info .tags a") if a.get_text(" ",strip=True)]
+                categories=[]
+                seen_categories=set()
+                for tag in raw_tags:
+                    tag=tag.strip()
+                    if not tag or len(tag)>65 or re.fullmatch(r"[\\d\\s,.]+",tag):continue
+                    key=tag.casefold()
+                    if key not in seen_categories:
+                        seen_categories.add(key)
+                        categories.append(tag)
+            else:
+                categories=[a.get_text(" ",strip=True) for a in soup.select(".tag a,.tags a,.genres a,.genre a,.book-tags a,[itemprop=genre] a") if a.get_text(" ",strip=True)]
+                if not categories:
+                    raw=label("[itemprop=genre],.genres,.genre,.book-tags")
+                    categories=[x.strip() for x in raw.split(",") if x.strip()]
+            chapters=list(found.values())
+            def order(x):
+                label=x["title"].strip()
+                # Extras belong after the numbered main story chapters.
+                is_extra=bool(re.search(r"ngoại\s*truyện|ngoai[-_\s]*truyen|extra|番外",label,re.I))
+                match=re.search(r"(?:chương|chuong|chapter|chap|ngoại\s*truyện|ngoai[-_\s]*truyen|extra)[^0-9]{0,20}(\d+)",label,re.I)
+                if not match:
+                    match=re.search(r"(?:chuong|chapter|chap|ngoai-truyen|extra)[-_]?(\d+)",urlparse(x["url"]).path,re.I)
+                number=int(match.group(1)) if match else 10**9
+                return (1 if is_extra else 0,number)
+            if not (wattpad_data and wattpad_data['parts']):
+                # NavyTeams lists newest first; stable sorting restores chapter 1 -> N -> extras.
+                chapters.sort(key=order)
+            return {"title":title[:200],"author":author.get_text(" ",strip=True)[:120] if author else "","description":description[:15000],"cover":cover,"categories":categories[:30],"chapters":chapters[:1000],"count":len(chapters),"truncated":len(pages)>12 or len(chapters)>1000}
+    except httpx.HTTPStatusError as exc:
+        status=exc.response.status_code
+        raise HTTPException(502,f"Máy chủ nguồn trả HTTP {status}. "+("Website có thể đang chặn truy cập từ Render." if status in (403,429,503) else "Không thể tải trang truyện.")) from exc
+    except httpx.ConnectError as exc:
+        raise HTTPException(502,"Không kết nối được tới máy chủ nguồn từ Render (lỗi DNS, TLS hoặc kết nối mạng).") from exc
+    except httpx.TimeoutException as exc:
+        raise HTTPException(504,"Máy chủ nguồn phản hồi quá chậm hoặc không kết nối được từ Render (NavyTeams: tối đa 45 giây; các nguồn khác: 20 giây).") from exc
+    except httpx.HTTPError as exc:
+        raise HTTPException(502,f"Không thể tải nguồn: {type(exc).__name__}.") from exc
+
+@app.post("/batch")
+async def batch(req:BatchRequest):
+    source=check_selected_source(req.url,req.source)
+    if req.start<1 or req.end<req.start or req.end-req.start>=20:
+        raise HTTPException(400,"Mỗi yêu cầu kỹ thuật hỗ trợ tối đa 20 chương; website tự chia đợt.")
+    discovery=None
+    if req.chapters is not None:
+        chosen=req.chapters
+        if len(chosen)>20:raise HTTPException(400,"Mỗi đợt tối đa 20 chương.")
+        for item in chosen:
+            if not normalized_url(req.url,item.get("url","")):raise HTTPException(400,"URL chương không hợp lệ.")
+    else:
+        discovery=await discover(ReadRequest(url=req.url))
+        chosen=discovery["chapters"][req.start-1:req.end]
+    if not chosen:raise HTTPException(404,"Không tìm thấy chương.")
+    is_wattpad=(urlparse(req.url).hostname or '').lower().endswith('wattpad.com')
+    semaphore=asyncio.Semaphore(8 if not is_wattpad else 5)
+    async with httpx.AsyncClient(timeout=20,follow_redirects=False,limits=httpx.Limits(max_connections=10),headers={"User-Agent":"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36","Accept":"text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8","Accept-Language":"en-US,en;q=0.9"}) as client:
+        archive_url=req.url
+        if is_wattpad and not re.search(r"/story/\\d+",urlparse(req.url).path):
+            info=await wattpad_story_metadata(client,req.url)
+            if info and info.get("story_url"):archive_url=info["story_url"]
+        archive=await wattpad_story_archive(client,archive_url) if is_wattpad else None
+        async def fetch_one(item):
+            async with semaphore:
+                try:
+                    if archive:
+                        match=re.match(r'/([0-9]{6,})',urlparse(item['url']).path)
+                        part=archive.get(match.group(1)) if match else None
+                        if part is not None:
+                            text,imgs=wattpad_story_text(part,item['url'],req.include_images)
+                            if (text or imgs):return {'title':item['title'],'url':item['url'],'content':text,'images':imgs}
+                    if is_wattpad and item.get("text_url"):
+                        try:
+                            direct=await client.get(item["text_url"],timeout=25)
+                            if direct.status_code==200 and len(direct.content)<3000000:
+                                text,imgs=wattpad_story_text(direct.text,item["url"],req.include_images)
+                                if (text or imgs):
+                                    return {"title":item["title"],"url":item["url"],"content":text,"images":imgs}
+                        except httpx.HTTPError:
+                            pass
+                    soup,base=await get_page(client,item["url"])
+                    content,images=chapter_body(soup,base)
+                    if is_wattpad:
+                        # Public chapter HTML is a second source of inline illustrations.
+                        extra_text,extra_images=wattpad_story_text(str(soup),base,req.include_images)
+                        if not content:content=extra_text
+                        content=wattpad_clean_text(content)
+                        # Wattpad reader HTML can contain author/cover elements even
+                        # inside broad layout nodes. Only trust paragraph images
+                        # extracted by the Wattpad-specific body parser.
+                        images=extra_images if req.include_images else []
+                    if is_wattpad and not content and not images:
+                        return {"title":item["title"],"url":item["url"],"content":"","images":[],"error":"Wattpad không cung cấp nội dung chương qua HTML hoặc bản ZIP công khai; chương có thể bị khóa hoặc nguồn từ chối máy chủ."}
+                    if not content and (urlparse(base).hostname or "").lower().endswith("navyteams.com"):
+                        return {"title":item["title"],"url":item["url"],"content":"","images":[],"error":"NavyTeams: trang chương không có nội dung HTML nhận diện được (có thể tải bằng JavaScript hoặc cấu trúc khác)."}
+                    if not content and not images and (urlparse(base).hostname or "").lower().endswith("truyenfull.live"):
+                        return {"title":item["title"],"url":item["url"],"content":"","images":[],"error":"Truyenfull: không tìm thấy nội dung chương trong HTML. Có thể trang bị chặn hoặc cấu trúc đã thay đổi."}
+                    resolved=[image_url(base,x) for x in images] if req.include_images else []
+                    return {"title":item["title"],"url":item["url"],"content":content,"images":[x for x in resolved if x]}
+                except (httpx.HTTPError,HTTPException) as exc:
+                    if isinstance(exc,httpx.HTTPStatusError):
+                        reason=f"Nguồn trả HTTP {exc.response.status_code}"
+                    elif isinstance(exc,HTTPException):
+                        reason=f"Nguồn: {exc.detail}"
+                    elif isinstance(exc,httpx.TimeoutException):
+                        reason="Nguồn phản hồi quá thời gian"
+                    else:
+                        reason=f"Lỗi kết nối nguồn ({type(exc).__name__})"
+                    return {"title":item["title"],"url":item["url"],"content":"","images":[],"error":reason}
+        result=await asyncio.gather(*(fetch_one(item) for item in chosen))
+    return {"title":discovery["title"] if discovery else "","author":discovery["author"] if discovery else "","chapters":result,"count":len(result)}
+
+@app.post("/image")
+async def image(req:ReadRequest):
+    url=image_url(req.url,req.url)
+    if not url:raise HTTPException(400,"URL ảnh HTTPS không hợp lệ.")
+    u=urlparse(url)
+    if not await public_image_host(u.hostname):raise HTTPException(400,"Máy chủ ảnh không an toàn hoặc không truy cập được.")
+    headers={"User-Agent":"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/131.0.0.0 Safari/537.36","Referer":f"https://{u.hostname}/","Accept":"image/png,image/jpeg,image/webp,*/*"}
+    candidates=[url]
+    # A public image CDN can fetch the exact same NavyTeams avatar when Render
+    # cannot resolve/reach navyteams.com. Never use this for arbitrary URLs.
+    if u.hostname in ("navyteams.com","www.navyteams.com") and u.path.startswith("/storage/story_avatars/"):
+        from urllib.parse import quote
+        candidates.append("https://wsrv.nl/?url="+quote(url,safe=""))
+        candidates.append("https://i0.wp.com/"+u.hostname+u.path)
+    async with httpx.AsyncClient(timeout=22,follow_redirects=False,trust_env=False) as client:
+        last_error=None
+        for candidate in candidates:
+            for attempt in range(2):
+                try:
+                    r=await client.get(candidate,headers=headers)
+                    if r.status_code in (429,500,502,503,504) and attempt==0:
+                        await asyncio.sleep(.7)
+                        continue
+                    r.raise_for_status()
+                    data=r.content
+                    mime=""
+                    if data.startswith(b"\\x89PNG\\r\\n\\x1a\\n"):mime="image/png"
+                    elif data.startswith(b"\\xff\\xd8\\xff"):mime="image/jpeg"
+                    elif data.startswith(b"RIFF") and data[8:12]==b"WEBP":mime="image/webp"
+                    if not mime or len(data)>5_000_000:raise ValueError("Ảnh không hợp lệ hoặc quá 5MB")
+                    return Response(data,media_type=mime,headers={"Cache-Control":"public, max-age=3600"})
+                except (httpx.HTTPError,ValueError) as exc:
+                    last_error=exc
+                    if attempt==0:await asyncio.sleep(.4)
+        raise HTTPException(502,"Không tải được ảnh bìa từ nguồn và các máy chủ ảnh dự phòng.") from last_error
+
+# Convert the actual generated Word document to a readable, Unicode PDF.
+class ConvertWordRequest(BaseModel):
+    docx_base64: str
+
+@app.post("/convert-docx-pdf")
+async def convert_docx_pdf(req: ConvertWordRequest):
+    import base64
+    import io
+    import os
+    from xml.sax.saxutils import escape
+    from docx import Document
+    from docx.oxml.ns import qn
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Image, KeepTogether
+    from reportlab.lib.styles import ParagraphStyle
+    from reportlab.lib.enums import TA_CENTER, TA_LEFT
+    from reportlab.lib.pagesizes import A4
+    from reportlab.pdfbase import pdfmetrics
+    from reportlab.pdfbase.ttfonts import TTFont
+    from matplotlib import font_manager
+    try:
+        data=base64.b64decode(req.docx_base64,validate=True)
+        if len(data)>18_000_000:raise HTTPException(413,"File Word quá lớn.")
+        doc=Document(io.BytesIO(data))
+        regular=font_manager.findfont(font_manager.FontProperties(family="DejaVu Sans"))
+        bold=font_manager.findfont(font_manager.FontProperties(family="DejaVu Sans",weight="bold"))
+        if "ReedttUnicode" not in pdfmetrics.getRegisteredFontNames():
+            pdfmetrics.registerFont(TTFont("ReedttUnicode",regular))
+            pdfmetrics.registerFont(TTFont("ReedttUnicodeBold",bold))
+            pdfmetrics.registerFontFamily("ReedttUnicode",normal="ReedttUnicode",bold="ReedttUnicodeBold")
+        out=io.BytesIO()
+        pdf=SimpleDocTemplate(out,pagesize=A4,leftMargin=36,rightMargin=36,topMargin=36,bottomMargin=36,title=doc.core_properties.title or "Reedtt")
+        styles={
+          "Normal":ParagraphStyle("Body",fontName="ReedttUnicode",fontSize=11,leading=16.5,spaceAfter=8,wordWrap="CJK"),
+          "Heading2":ParagraphStyle("Chapter",fontName="ReedttUnicodeBold",fontSize=11,leading=16.5,spaceBefore=12,spaceAfter=6,keepWithNext=True),
+          "StoryTitle":ParagraphStyle("Title",fontName="ReedttUnicodeBold",fontSize=25,leading=31,textColor="#1F3864",alignment=TA_CENTER,spaceAfter=12,keepWithNext=True)
+        }
+        flow=[]
+        from docx.oxml.ns import qn
+        from PIL import Image as PILImage
+        for p in doc.paragraphs:
+            kind=p.style.name if p.style else "Normal"
+            if kind in ("Heading 2","Heading2"):kind="Heading2"
+            if kind not in styles:kind="Normal"
+            txt=p.text.strip()
+            if txt:
+                flow.append(Paragraph(escape(txt),styles[kind]))
+            for run in p.runs:
+                for blip in run._element.xpath(".//a:blip"):
+                    rid=blip.get(qn("r:embed"))
+                    if not rid or rid not in p.part.related_parts:continue
+                    raw=p.part.related_parts[rid].blob
+                    try:
+                        picture=PILImage.open(io.BytesIO(raw))
+                        w,h=picture.size
+                        ratio=min(1,450/max(w,1),540/max(h,1))
+                        flow.append(Image(io.BytesIO(raw),width=w*ratio,height=h*ratio))
+                        flow.append(Spacer(1,8))
+                    except Exception:continue
+        if not flow:raise HTTPException(400,"File Word không có nội dung.")
+        pdf.build(flow)
+        return Response(content=out.getvalue(),media_type="application/pdf",headers={"Content-Disposition":'attachment; filename="reedtt.pdf"'})
+    except HTTPException:raise
+    except Exception as exc:raise HTTPException(422,"Không thể chuyển Word thành PDF: "+str(exc)[:180])
+
+# Rendered-page extraction for JavaScript-driven, public story pages.
+_render_browser_lock = asyncio.Lock()
+_render_browser_ready = False
+
+async def _render_browser():
+    global _render_browser_ready
+    from playwright.async_api import async_playwright
+    async with _render_browser_lock:
+        if not _render_browser_ready:
+            import subprocess, sys
+            # Render's existing build command installs Python packages only.
+            # Install headless Chromium once into the service's writable cache.
+            result = await asyncio.to_thread(
+                subprocess.run, [sys.executable, "-m", "playwright", "install", "chromium"],
+                capture_output=True, text=True, timeout=180
+            )
+            if result.returncode:
+                raise HTTPException(503, "Không thể cài Chromium trên Render: " + result.stderr[-350:])
+            _render_browser_ready = True
+    return async_playwright()
+
+async def _render_page(url):
+    target = normalized_url(url, url)
+    if not target or not (urlparse(target).hostname or "").endswith(("giatocvuongtai.com","luotnovel1.site")):
+        raise HTTPException(400, "Chỉ hỗ trợ đường dẫn HTTPS của Gia Tộc Vượng Tài.")
+    try:
+        async with await _render_browser() as playwright:
+            browser = await playwright.chromium.launch(headless=True, args=["--no-sandbox", "--disable-dev-shm-usage"])
+            try:
+                context = await browser.new_context(viewport={"width": 1280, "height": 900}, locale="vi-VN")
+                page = await context.new_page()
+                await page.goto(target, wait_until="domcontentloaded", timeout=35000)
+                await page.wait_for_timeout(1800)
+                for _ in range(8):
+                    await page.evaluate("window.scrollBy(0, Math.max(650, window.innerHeight))")
+                    await page.wait_for_timeout(500)
+                data = await page.evaluate("""() => {
+                  const title = document.querySelector('h1')?.textContent?.trim() || document.querySelector("meta[property='og:title']")?.content || '';
+                  const links = [...document.querySelectorAll('a[href]')].map(a => ({
+                    title: (a.querySelector('strong,p')?.textContent || a.textContent || '').trim(),
+                    url: a.href
+                  })).filter(x => {try {
+                    const u=new URL(x.url);
+                    return (u.pathname.replace(/\\/$/,'')==='/reader' && u.searchParams.has('storyId') && u.searchParams.has('chapter')) || (u.hostname.endsWith('luotnovel1.site') && /(?:chuong|chapter|chap)[-_ /]?\\d+|\\/\\d+(?:\\/|$)/i.test(u.pathname));
+                  } catch {return false;}});
+                  const body=document.querySelector('.reader-demo-body,.reader-content,.chapter-content,#chapter-content,[data-chapter-content]');
+                  const ps=body?[...body.querySelectorAll('.chapter-paragraph')]:[];
+                  const fallback=body&&!ps.length?[...body.querySelectorAll('p.reader-demo-para,p')]:[];
+                  const content=(ps.length?ps:fallback).map(p=>p.textContent.trim()).filter(Boolean).join('\\n\\n');
+                  return {title,links,content};
+                }""")
+                return data
+            finally:
+                await browser.close()
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(502, "Playwright không thể đọc trang: " + str(exc)[:250]) from exc
+
+@app.post("/render-discover")
+async def render_discover(req: ReadRequest):
+    data = await _render_page(req.url)
+    story_id = __import__("urllib.parse", fromlist=["parse_qs"]).parse_qs(urlparse(req.url).query).get("storyId", [None])[0]
+    seen = set()
+    chapters = []
+    for item in data.get("links", []):
+        link = normalized_url(req.url, item.get("url", ""))
+        if not link or link in seen:
+            continue
+        if story_id and __import__("urllib.parse", fromlist=["parse_qs"]).parse_qs(urlparse(link).query).get("storyId", [None])[0] != story_id:
+            continue
+        seen.add(link)
+        chapters.append({"title":item.get("title") or f"Chương {len(chapters)+1}", "url":link})
+    if not chapters and "/reader" in urlparse(req.url).path and data.get("content"):
+        chapters.append({"title":data.get("title") or "Chương đã chọn", "url":req.url})
+    return {"title":data.get("title", ""), "author":"", "chapters":chapters, "count":len(chapters)}
+
+@app.post("/render-batch")
+async def render_batch(req: BatchRequest):
+    if req.chapters is None or len(req.chapters)>10:
+        raise HTTPException(400, "Mỗi đợt tối đa 10 chương.")
+    chapters=[]
+    for item in req.chapters:
+        url=normalized_url(req.url, item.get("url", ""))
+        if not url:
+            raise HTTPException(400, "URL chương không hợp lệ.")
+        try:
+            data=await _render_page(url)
+            content=data.get("content", "")
+            chapters.append({"title":item.get("title",""),"url":url,"content":content,"images":[],
+                             **({"error":"Trang không hiển thị văn bản có thể trích xuất; OCR ảnh chưa được bật."} if not content else {})})
+        except HTTPException as exc:
+            chapters.append({"title":item.get("title",""),"url":url,"content":"","images":[],"error":str(exc.detail)})
+    return {"chapters":chapters,"count":len(chapters)}
+
+async def luotnovel_discover(url):
+    from urllib.parse import parse_qs
+    found={}
+    async with httpx.AsyncClient(timeout=25,follow_redirects=False,headers={"User-Agent":"Mozilla/5.0","Accept-Language":"vi-VN,vi;q=0.9"}) as client:
+        soup,base=await get_page(client,url)
+        title=(soup.select_one("meta[property='og:title']") or {}).get("content","") or (soup.h1.get_text(" ",strip=True) if soup.h1 else "")
+        story_path=urlparse(base).path
+        def collect(doc,page_url):
+            for a in doc.select("a[href]"):
+                link=normalized_url(page_url,a.get("href",""))
+                if not link or urlparse(link).path.rstrip("/")==story_path.rstrip("/"):continue
+                if (urlparse(link).hostname or "").lower()!=(urlparse(base).hostname or "").lower():continue
+                label=a.get_text(" ",strip=True)
+                path=urlparse(link).path
+                if not (re.search(r"(?:chuong|chapter|chap)[-_ /]?\d+|/\d+(?:/|$)",path,re.I) or re.search(r"(?:chương|chuong|chapter)\s*\d+",label,re.I)):continue
+                found[link]={"title":label[:180] or "Chương "+str(len(found)+1),"url":link}
+        collect(soup,base)
+        pages=page_links(soup,base,story_path)
+        for link in pages[:30]:
+            try:
+                sub,_=await get_page(client,link)
+                collect(sub,link)
+            except (HTTPException,httpx.HTTPError):pass
+    if len(found)<3:
+        # LuotNovel loads its table of contents asynchronously into #nt_listchapter.
+        try:
+            async with await _render_browser() as playwright:
+                browser=await playwright.chromium.launch(headless=True,args=["--no-sandbox","--disable-dev-shm-usage"])
+                try:
+                    page=await browser.new_page(locale="vi-VN")
+                    await page.goto(url,wait_until="domcontentloaded",timeout=35000)
+                    try:
+                        await page.locator("#nt_listchapter a[href]").first.wait_for(timeout=18000)
+                    except Exception:
+                        pass
+                    for _ in range(5):
+                        await page.evaluate("window.scrollTo(0,document.body.scrollHeight)")
+                        await page.wait_for_timeout(700)
+                    rendered_html=await page.content()
+                    rendered_soup=BeautifulSoup(rendered_html,"html.parser")
+                    collect(rendered_soup,url)
+                finally:
+                    await browser.close()
+        except Exception:
+            pass
+    if len(found)<3:
+        try:
+            rendered=await _render_page(url)
+            for item in rendered.get("links",[]):
+                link=normalized_url(url,item.get("url",""))
+                if link:found[link]={"title":item.get("title") or "Chương "+str(len(found)+1),"url":link}
+        except HTTPException:
+            pass
+    return {"title":title,"author":"","chapters":list(found.values()),"count":len(found)}                found=dict(sorted(found.items(),key=lambda pair:int(re.search(r"Chương\s*(\d+)",pair[1]["title"],re.I).group(1)) if re.search(r"Chương\s*(\d+)",pair[1]["title"],re.I) else 10**9))
             def meta(selector):
                 t=soup.select_one(selector)
                 return (t.get("content") or "").strip() if t else ""

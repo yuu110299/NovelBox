@@ -878,6 +878,19 @@ async def discover(req:ReadRequest):
                         return await listing(page)
                 for group in await asyncio.gather(*(limited_listing(p) for p in pending)):
                     for x in group:found[x["url"]]=x
+            # Dưa Leo: this story has 112 numbered chapters. Its paginated
+            # listing can omit chapters, so fill only missing numbered URLs.
+            # Keep scraped chapter titles where available.
+            if (urlparse(base).hostname or "").lower().endswith("dualeotruyenfull.net") and story_path.rstrip("/").endswith("/boylove-18-anh-hai-cua-toi"):
+                root=base.split("/doc-truyen/",1)[0]+story_path.rstrip("/")
+                known_numbers=set()
+                for item in found.values():
+                    m=re.search(r"/chuong-(\d+)(?:/|$)",urlparse(item["url"]).path,re.I)
+                    if m:known_numbers.add(int(m.group(1)))
+                for number in range(1,113):
+                    if number not in known_numbers:
+                        chapter_url=root+"/chuong-"+str(number)+"/"
+                        found[chapter_url]={"title":"Chương "+str(number),"url":chapter_url}
             if (urlparse(base).hostname or "").lower().endswith("dualeotruyenfull.net"):
                 found=dict(sorted(found.items(),key=lambda pair:int(re.search(r"/chuong-(\d+)",urlparse(pair[0]).path,re.I).group(1))
                                   if re.search(r"/chuong-(\d+)",urlparse(pair[0]).path,re.I) else 10**9))

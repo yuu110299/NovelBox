@@ -183,7 +183,7 @@ def chapter_links(soup,base,story_path):
         # Dưa Leo-specific parser: accept chapter URLs from both HTML anchors
         # and embedded markup, including optional chapter title slugs.
         story_root=story_path.rstrip("/")
-        pattern=re.compile(r"^"+re.escape(story_root)+r"/chuong[-_/]?(\\d+)(?:[-/][^?#]*)?/?$",re.I)
+        pattern=re.compile(r"^"+re.escape(story_root)+r"/chuong[-_/]?(\d+)(?:[-/][^?#]*)?/?$",re.I)
         candidates=[]
         for anchor in soup.select("a[href]"):
             candidates.append((anchor.get("href",""),anchor.get_text(" ",strip=True)))
@@ -199,10 +199,10 @@ def chapter_links(soup,base,story_path):
             number=int(match.group(1))
             if number<1:continue
             href=urlunparse((parsed.scheme,parsed.netloc,parsed.path,"","",""))
-            label=re.search(r"(Chương\\s*\\d+\\s*[:.\\-]?\\s*[^\\n]*)",title,re.I)
+            label=re.search(r"(Chương\s*\d+\s*[:.\\-]?\s*[^\n]*)",title,re.I)
             name=(label.group(1) if label else title or "Chương "+str(number)).strip()
             if href not in found:found[href]={"title":name[:180],"url":href}
-        return sorted(found.values(),key=lambda item:(int(re.search(r"/chuong[-_/]?(\\d+)",urlparse(item["url"]).path,re.I).group(1)),item["url"]))
+        return sorted(found.values(),key=lambda item:(int(re.search(r"/chuong[-_/]?(\d+)",urlparse(item["url"]).path,re.I).group(1)),item["url"]))
     if host.endswith("navyteams.com"):
         # Read chapter entries by their HTML container, never by chapter-name text.
         # Keep DOM order and include extras with arbitrary names.

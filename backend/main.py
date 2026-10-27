@@ -14,7 +14,7 @@ from pydantic import BaseModel
 app = FastAPI(title="Reedtt Reader API")
 app.add_middleware(CORSMiddleware, allow_origins=["https://yuu110299.github.io", "https://ginginji1102.github.io", "https://truyen-reader-demo.vercel.app"], allow_origin_regex=r"https://[a-z0-9-]+\.onrender\.com", allow_methods=["GET","POST"], allow_headers=["*"])
 
-ALLOWED = ("truyenfull.live", "wattpad.com", "wordpress.com", "navyteams.com", "inkitt.com", "giatocvuongtai.com", "luotnovel1.site", "dualeotruyenfull.net")
+ALLOWED = ("truyenfull.live", "wattpad.com", "wordpress.com", "navyteams.com", "inkitt.com", "giatocvuongtai.com", "luotnovel1.site", "dualeotruyenfull.net", "truyenhda.cc")
 SELECTORS = ("#chapter-content", "#chapterContent", "#chapter-content-body", ".chapter-reading", ".chapter-body", ".chapter-text", ".reading-content", ".entry-content", ".chapter-content", ".reading-content", ".entry-content", ".chapter-c", "article", "[itemprop=articleBody]")
 SOURCE_HOSTS = {
     "wattpad.com": "wattpad",
@@ -25,6 +25,7 @@ SOURCE_HOSTS = {
     "luotnovel1.site": "luotnovel",
     "inkitt.com": "inkitt",
     "dualeotruyenfull.net": "dualeo",
+    "truyenhda.cc": "truyenhda",
 }
 
 def source_for_url(url: str) -> str:
@@ -179,6 +180,17 @@ def chapter_links(soup,base,story_path):
     found={}
     host=(urlparse(base).hostname or "").lower()
     selectors=".list-chapter a[href],#list-chapter a[href],.chapter-list a[href],.list-chapters a[href],ul.list-chapter a[href],#chaptersList a[href],a[href*='chuong-'],a[href*='chapter-']"
+    if host.endswith("truyenhda.cc"):
+        root=story_path.rstrip("/")+"/chap/"
+        for a in soup.select("a[href]"):
+            href=normalized_url(base,a.get("href",""))
+            if not href or not urlparse(href).path.startswith(root):continue
+            label=a.get_text(" ",strip=True)
+            match=re.search(r"Chương\s*(\d+)",label,re.I)
+            if not match:continue
+            if a.find("img",alt=re.compile("vip",re.I)) or a.find_parent(class_=re.compile("vip|locked",re.I)):continue
+            found[href]={"title":label[:180],"url":href}
+        return sorted(found.values(),key=lambda item:int(re.search(r"Chương\s*(\d+)",item["title"],re.I).group(1)))
     if host.endswith("dualeotruyenfull.net"):
         root=story_path.rstrip("/")+"/chuong-"
         for anchor in soup.select("a[href]"):
@@ -528,6 +540,8 @@ def chapter_body(soup, source_url=''):
     host=(urlparse(source_url).hostname or '').lower()
     special=host.endswith(('wattpad.com','inkitt.com'))
     preferred=(('.story-page-text','#story-text-container') if host.endswith('inkitt.com') else ())+('[data-testid=story-part-content]','.story-part-content','.panel-reading','.reading-content','.chapter-text','.chapter-content')
+    if host.endswith("truyenhda.cc"):
+        preferred=(".chapter-content","#chapter-content",".reading-content",".entry-content",".chapter-body","article")
     if host.endswith("dualeotruyenfull.net"):
         preferred=(".reading-content",".chapter-content","#chapter-content",".entry-content",".reader-content",".chapter-body","article .entry-content","article")
     if host.endswith("luotnovel1.site"):

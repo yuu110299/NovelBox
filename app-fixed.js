@@ -18,7 +18,7 @@
 
 
 const $=id=>document.getElementById(id);
-const supportedHosts=['truyenhda.cc','dualeotruyenfull.net','truyenfull.live','wattpad.com','wordpress.com','navyteams.com','giatocvuongtai.com','luotnovel1.site'];
+const supportedHosts=['dualeotruyenfull.net','truyenfull.live','wattpad.com','wordpress.com','navyteams.com','giatocvuongtai.com','luotnovel1.site'];
 function cleanText(node){return (node?.innerText||node?.textContent||'').replace(/\n{3,}/g,'\n\n').trim()}
 function safeUrl(value){const u=new URL(value);if(!['https:','http:'].includes(u.protocol))throw Error('Chỉ hỗ trợ đường dẫn HTTP hoặc HTTPS.');return u}
 

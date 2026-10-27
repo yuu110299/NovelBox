@@ -458,6 +458,21 @@ def wattpad_story_text(html,base,include_images=False):
 
 def page_links(soup,base,story_path):
     result=[]
+    if (urlparse(base).hostname or "").lower().endswith("truyenhda.cc"):
+        from urllib.parse import parse_qs
+        root=story_path.rstrip("/")
+        for a in soup.select("a[href]"):
+            href=normalized_url(base,a.get("href",""))
+            if not href:continue
+            parsed=urlparse(href)
+            if not (parsed.hostname or "").lower().endswith("truyenhda.cc"):continue
+            path=parsed.path.rstrip("/")
+            if not (path==root or path.startswith(root+"/page/")):continue
+            if "/chap/" in path:continue
+            params=parse_qs(parsed.query)
+            is_page=bool(re.search(r"/page/\d+$",path,re.I) or any(k.lower() in ("page","paged","pagenum") for k in params))
+            if is_page and href not in result:result.append(href)
+        return result[:200]
     if (urlparse(base).hostname or "").endswith("dualeotruyenfull.net"):
         for a in soup.select("a[href*='/chuong/page/']"):
             href=normalized_url(base,a.get("href",""))
@@ -882,6 +897,25 @@ async def discover(req:ReadRequest):
                         return await listing(page)
                 for group in await asyncio.gather(*(limited_listing(p) for p in pending)):
                     for x in group:found[x["url"]]=x
+            if (urlparse(base).hostname or "").lower().endswith("truyenhda.cc"):
+                # Follow pagination links discovered on every listing page, not
+                # just those visible on the initial story page.
+                visited={base}
+                queue=list(page_links(soup,base,story_path))
+                while queue and len(visited)<200:
+                    page=queue.pop(0)
+                    if page in visited:continue
+                    visited.add(page)
+                    try:
+                        sub,actual=await get_page(client,page)
+                    except (httpx.HTTPError,HTTPException):
+                        continue
+                    for item in chapter_links(sub,actual,story_path):
+                        found[item["url"]]=item
+                    for next_page in page_links(sub,actual,story_path):
+                        if next_page not in visited and next_page not in queue:
+                            queue.append(next_page)
+                found=dict(sorted(found.items(),key=lambda pair:int(re.search(r"Chương\s*(\d+)",pair[1]["title"],re.I).group(1)) if re.search(r"Chương\s*(\d+)",pair[1]["title"],re.I) else 10**9))
             if (urlparse(base).hostname or "").lower().endswith("dualeotruyenfull.net"):
                 found=dict(sorted(found.items(),key=lambda pair:int(re.search(r"Chương\s*(\d+)",pair[1]["title"],re.I).group(1)) if re.search(r"Chương\s*(\d+)",pair[1]["title"],re.I) else 10**9))
             def meta(selector):

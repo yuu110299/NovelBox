@@ -1803,10 +1803,14 @@ async def atlantis_rendered_html(url):
                 page=await browser.new_page(locale="vi-VN")
                 await page.goto(target.split("#",1)[0],wait_until="domcontentloaded",timeout=35000)
                 try:
+                    await page.locator('a[href="#muc-luc"], button:has-text("Mục lục"), [role="tab"]:has-text("Mục lục")').first.click(timeout=3500)
+                except Exception:
+                    pass
+                try:
                     await page.locator(".review-prose, a[href*='/chuong/c']").first.wait_for(timeout=12000)
                 except Exception:
                     pass
-                await page.wait_for_timeout(1000)
+                await page.wait_for_timeout(1600)
                 html=await page.content()
                 return BeautifulSoup(html,"html.parser"),page.url
             finally:
@@ -1866,12 +1870,12 @@ async def discover(req:ReadRequest):
                     value=paragraph.get_text(" ",strip=True)
                     value=re.sub(r"^"+re.escape(key)+r"\s*[:：]\s*","",value).strip()
                     fields[key]=value
-        cover_node=soup.select_one('section img[src^="/api/media/"], img[alt*="Bác Sĩ Gia Đình"][src^="/api/media/"]')
+        cover_node=soup.select_one('section img[src^="/api/media/"], img[src^="/api/media/"]')
         cover=urljoin(base,cover_node.get("src")) if cover_node else ""
         chapter_items=[]
         seen=set()
-        for a in soup.select('a[href*="/chuong/c"]'):
-            link=urljoin(base,a.get("href",""))
+        for a in soup.select('a[href], [data-href]'):
+            link=urljoin(base,a.get("href") or a.get("data-href") or "")
             parsed=urlparse(link)
             if parsed.hostname!=(urlparse(base).hostname) or not re.fullmatch(r"/chuong/c\d+/?",parsed.path,flags=re.I):
                 continue
@@ -1880,7 +1884,7 @@ async def discover(req:ReadRequest):
             chapter_items.append({"title":a.get_text(" ",strip=True) or "Chương "+str(len(chapter_items)+1),"url":link})
         chapter_items.sort(key=lambda x:int(re.search(r"/chuong/c(\d+)",x["url"]).group(1)))
         if not chapter_items:
-            raise HTTPException(422,"Atlantis dùng giao diện JavaScript; máy chủ chưa đọc được mục lục từ HTML công khai. Không thể tự suy đoán danh sách chương.")
+            raise HTTPException(422,"Atlantis: trình duyệt chưa lấy được liên kết /chuong/cN. HTML có "+str(len(soup.select("a[href]")))+" liên kết, "+str(len(soup.select(".review-prose")))+" khối thông tin. Có thể mục lục chưa tải hoặc website hạn chế Render.")
         return {"title":fields.get("Tên truyện") or (soup.h1.get_text(" ",strip=True) if soup.h1 else ""), "author":fields.get("Tác giả",""),"description":"\n".join(f"{k}: {v}" for k,v in fields.items()),"cover":cover,"categories":[v.strip() for v in fields.get("Thể loại","").split(",") if v.strip()],"chapters":chapter_items,"count":len(chapter_items),"story_url":base}
     if (u.hostname or "").lower().endswith("luotnovel1.site"):
         return await luotnovel_discover(req.url)

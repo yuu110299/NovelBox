@@ -964,9 +964,11 @@ async def discover(req:ReadRequest):
                 requested_path=urlparse(req.url).path
                 landing_path=re.sub(r"/(?:trang|chuong|chapter|chap)-\\d+(?:-[^/]*)?/?$", "/", requested_path, flags=re.I)
                 landing_url=urlunparse((u.scheme,u.netloc,landing_path,"","",""))
-                landing_soup=soup
-                if landing_path.rstrip("/") != urlparse(base).path.rstrip("/"):
-                    landing_soup,_=await get_page(client,landing_url)
+                # Always fetch the landing page separately: redirects or pagination
+                # can leave soup pointing at a chapter even for a story URL.
+                landing_soup,landing_final_url=await get_page(client,landing_url)
+                if re.search(r"/(?:chuong|chapter|chap)-\\d+",urlparse(landing_final_url).path,re.I):
+                    raise HTTPException(422,"TruyenFull chuyển hướng trang truyện sang trang chương; không thể xác định tên truyện an toàn.")
                 heading=landing_soup.select_one('h3.title[itemprop="name"]')
                 if not heading:
                     raise HTTPException(422,"TruyenFull: trang thông tin không có h3.title[itemprop=name]; không lấy tên chương thay thế.")

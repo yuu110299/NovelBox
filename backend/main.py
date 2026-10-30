@@ -892,6 +892,29 @@ async def discover(req:ReadRequest):
                         title=story_root.strip("/").replace("-"," ").title()
             if (urlparse(base).hostname or "").lower().endswith("truyenfull.live") and urlparse(req.url).path.rstrip("/")=="/vinh-quang-gianh-lay-nam-chinh":
                 title="Vinh Quang Giành Lấy Nam Chính"
+            # A chapter heading is never a valid novel title. This applies to
+            # every supported source, including extra chapters and redirects.
+            import html
+            title=html.unescape(title or "").replace("\u00a0"," ").strip()
+            if re.match(r"^(?:Tên truyện\s*:\s*)?(?:Chương|Chuong|Chapter|Chap)\s*\d+\b",title,re.I):
+                original_path=urlparse(req.url).path.rstrip("/")
+                root_path=re.sub(r"/(?:trang|chuong|chapter|chap)-\d+(?:-[^/]*)?$","",original_path,flags=re.I)
+                root_path=root_path or original_path
+                root_title=""
+                if root_path and root_path!=urlparse(base).path.rstrip("/"):
+                    try:
+                        root_url=urlunparse((u.scheme,u.netloc,root_path+"/","","",""))
+                        root_soup,_=await get_page(client,root_url)
+                        for selector in (".book-info h1",".info h1",".story-info h1","h1[itemprop='name']",".book-title",".story-title","h1"):
+                            node=root_soup.select_one(selector)
+                            if node:
+                                candidate=html.unescape(node.get_text(" ",strip=True)).strip()
+                                if candidate and not re.match(r"^(?:Chương|Chuong|Chapter|Chap)\s*\d+\b",candidate,re.I):
+                                    root_title=candidate
+                                    break
+                    except (HTTPException,httpx.HTTPError):
+                        pass
+                title=root_title or root_path.strip("/").split("/")[-1].replace("-"," ").title()
             author=soup.select_one("span#storyAuthor,[itemprop='author'],.author")
             author_name=author.get_text(" ",strip=True) if author else ""
             if (urlparse(base).hostname or "").lower().endswith("navyteams.com"):

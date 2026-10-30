@@ -117,15 +117,16 @@ async function loadStory(){
    img.onerror=async()=>{
     img.onerror=null;
     try{
-     // Reuse the same image fetch and fallback logic that works for Word/EPUB export.
-     const cover=await imageBytes(coverUrl,true);
-     if(!cover||!cover.bytes?.length)throw Error("Không tải được ảnh bìa");
-     if(storyMeta.cover!==coverUrl)return;
-     displayedCoverBytes=cover;imageCache.set(coverUrl,cover);
+     // Cover export already handles Googleusercontent size variants and public image relays.
+     const cover=await coverBytes();
+     if(!cover?.bytes?.length)throw Error("Không tải được ảnh bìa");
+     if(!img.isConnected||!document.getElementById("storymeta")?.contains(img))return;
+     displayedCoverBytes=cover;
+     imageCache.set(coverUrl,cover);
      const blob=new Blob([cover.bytes],{type:cover.mime||"image/jpeg"});
      const local=URL.createObjectURL(blob);
      img.onload=()=>URL.revokeObjectURL(local);
-     img.onerror=()=>{URL.revokeObjectURL(local);img.onerror=null;img.alt="Không thể hiển thị ảnh bìa"};
+     img.onerror=()=>{URL.revokeObjectURL(local);img.removeAttribute("src");img.alt="Không thể hiển thị ảnh bìa"};
      img.src=local;
     }catch(e){
      img.removeAttribute("src");

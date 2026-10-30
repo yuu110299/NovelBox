@@ -875,6 +875,13 @@ async def discover(req:ReadRequest):
             else:
                 title=(soup.select_one("meta[property='og:title']") or {}).get("content","") or (soup.h1.get_text(" ",strip=True) if soup.h1 else "")
                 if (urlparse(base).hostname or "").lower().endswith("truyenfull.live"):
+                    # The story heading is within the information panel; chapter
+                    # headings and og:title may instead describe the last chapter.
+                    story_heading=soup.select_one(".book-info h3, .book-info h2, .info h3, .story-info h3, .book-info h1, .info h1, .story-info h1")
+                    if story_heading:
+                        heading=story_heading.get_text(" ",strip=True)
+                        if heading and not re.match(r"^(?:Chương|Chuong|Chapter|Chap)\\s*\\d+",heading,re.I):
+                            title=heading
                     # Never use the last chapter heading as the novel title.
                     # Prefer the story info heading, then the story root's metadata.
                     story_root=re.sub(r"/trang-\d+/?$","/",urlparse(base).path,flags=re.I)

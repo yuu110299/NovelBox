@@ -915,6 +915,24 @@ async def discover(req:ReadRequest):
                     except (HTTPException,httpx.HTTPError):
                         pass
                 title=root_title or root_path.strip("/").split("/")[-1].replace("-"," ").title()
+            # Final, source-independent title validation. Some providers redirect
+            # the landing page to the last chapter; their og:title is a chapter.
+            # Never send such a heading to the UI or exported book metadata.
+            chapter_heading=re.compile(r"^(?:(?:Tên truyện|Title)\s*:\s*)?(?:Chương|Chuong|Chapter|Chap)\s*\d+\b",re.I)
+            if chapter_heading.match(title):
+                requested=urlparse(req.url)
+                slug=requested.path.rstrip("/").split("/")[-1]
+                # Prefer canonical story URL metadata when present, otherwise
+                # derive a safe fallback from the user-provided story slug.
+                canonical=soup.select_one('link[rel="canonical"]')
+                canonical_url=normalized_url(base,canonical.get("href","")) if canonical else None
+                if canonical_url:
+                    cp=urlparse(canonical_url).path.rstrip("/").split("/")[-1]
+                    if cp and not re.match(r"^(?:chuong|chapter|chap)-\d+",cp,re.I):
+                        slug=cp
+                title=slug.replace("-"," ").replace("_"," ").strip().title()
+            if chapter_heading.match(title):
+                raise HTTPException(422,"Không tìm được tên truyện hợp lệ từ trang nguồn.")
             author=soup.select_one("span#storyAuthor,[itemprop='author'],.author")
             author_name=author.get_text(" ",strip=True) if author else ""
             if (urlparse(base).hostname or "").lower().endswith("navyteams.com"):

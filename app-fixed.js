@@ -110,21 +110,31 @@ async function loadStory(){
   const details=document.createElement("div");details.className="story-meta-details";
   displayedCoverBytes=null;
   coverDataUrl=null;
-  if(storyMeta.cover){const img=document.createElement("img");const coverUrl=storyMeta.cover;img.alt="Ảnh bìa truyện";img.className="story-meta-cover";img.referrerPolicy="no-referrer";img.loading="lazy";
-  // Truyenfull: try a CORS-enabled load so the already visible cover can be
-  // copied into the exported file via canvas without a second network request.
-  const truyenfullCover=(()=>{try{return new URL(storyMeta.story_url||$('url').value).hostname==='truyenfull.live'}catch{return false}})();
-  if(truyenfullCover)img.crossOrigin="anonymous";
-  img.onload=()=>{void rememberDisplayedCover(img,coverUrl)};
-  img.onerror=async()=>{
-   // If Google Photos does not send CORS headers, keep the cover visible
-   // without CORS; the export can still use the backend proxy.
-   if(truyenfullCover&&img.crossOrigin){
-    img.onerror=null;img.removeAttribute("crossorigin");
-    img.onload=()=>{void rememberDisplayedCover(img,coverUrl)};
-    img.src=coverUrl;return;
-   }
-   img.onerror=null;try{const response=await fetch(API+"/image",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({url:coverUrl}),signal:AbortSignal.timeout(30000)});if(!response.ok)throw Error("Ảnh nguồn không tải được");const blob=await response.blob();if(!blob.type.startsWith("image/"))throw Error("Phản hồi không phải ảnh");const bytes={bytes:new Uint8Array(await blob.arrayBuffer()),mime:blob.type,ext:blob.type==="image/png"?"png":blob.type==="image/webp"?"webp":"jpg"};if(storyMeta.cover===coverUrl){displayedCoverBytes=bytes;imageCache.set(coverUrl,bytes)}const local=URL.createObjectURL(blob);img.onload=()=>{URL.revokeObjectURL(local)};img.onerror=()=>{URL.revokeObjectURL(local);img.style.display="none";img.title="Máy chủ ảnh bìa từ chối tải"};img.removeAttribute("crossorigin");img.src=local}catch(e){img.style.display="none";img.title=e.message||"Không tải được ảnh bìa"}};img.src=coverUrl;layout.append(img)}
+  if(storyMeta.cover){
+   const img=document.createElement("img"),coverUrl=storyMeta.cover;
+   img.alt="Ảnh bìa truyện";img.className="story-meta-cover";img.referrerPolicy="no-referrer";img.loading="eager";
+   img.onload=()=>{void rememberDisplayedCover(img,coverUrl)};
+   img.onerror=async()=>{
+    img.onerror=null;
+    try{
+     // Reuse the same image fetch and fallback logic that works for Word/EPUB export.
+     const cover=await imageBytes(coverUrl,true);
+     if(!cover||!cover.bytes?.length)throw Error("Không tải được ảnh bìa");
+     if(storyMeta.cover!==coverUrl)return;
+     displayedCoverBytes=cover;imageCache.set(coverUrl,cover);
+     const blob=new Blob([cover.bytes],{type:cover.mime||"image/jpeg"});
+     const local=URL.createObjectURL(blob);
+     img.onload=()=>URL.revokeObjectURL(local);
+     img.onerror=()=>{URL.revokeObjectURL(local);img.onerror=null;img.alt="Không thể hiển thị ảnh bìa"};
+     img.src=local;
+    }catch(e){
+     img.removeAttribute("src");
+     img.alt="Không thể hiển thị ảnh bìa";
+     img.title=e.message||"Ảnh bìa không khả dụng";
+    }
+   };
+   img.src=coverUrl;layout.append(img);
+  }
   for(const [name,val] of [["Tên truyện",storyMeta.title],["Tác giả",storyMeta.author],["Thể loại",storyMeta.categories.join(", ")],["Mô tả",storyMeta.description]]){if(val){const p=document.createElement("p");const b=document.createElement("strong");b.textContent=name+": ";p.append(b,document.createTextNode(val));if(name==="Mô tả"&&val.length>450){p.style.maxHeight="9em";p.style.overflow="hidden";const toggle=document.createElement("button");toggle.type="button";toggle.className="alt";toggle.textContent="Xem thêm";toggle.style.marginBottom="12px";toggle.onclick=()=>{const expanded=p.style.maxHeight==="none";p.style.maxHeight=expanded?"9em":"none";toggle.textContent=expanded?"Xem thêm":"Thu gọn";toggle.setAttribute("aria-expanded",String(!expanded))};toggle.setAttribute("aria-expanded","false");details.append(p,toggle)}else details.append(p)}}
   layout.append(details);meta.append(layout);
   downloaded=[];

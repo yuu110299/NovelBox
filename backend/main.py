@@ -911,7 +911,7 @@ async def discover(req:ReadRequest):
             # Do not refetch the same pagination URL or reparse pages when the
             # main page already exposes the complete chapter list.
             pending=list(dict.fromkeys(p for p in pages[:200 if (urlparse(base).hostname or "").lower().endswith("truyenfull.live") else 150 if (urlparse(base).hostname or "").lower().endswith("dualeotruyenfull.net") else 30] if p!=base))
-            if pending:
+            if pending or (urlparse(base).hostname or "").lower().endswith("truyenfull.live"):
                 limiter=asyncio.Semaphore(10 if (urlparse(base).hostname or "").lower().endswith("dualeotruyenfull.net") else 8)
                 async def limited_listing(page):
                     async with limiter:
@@ -923,7 +923,7 @@ async def discover(req:ReadRequest):
                 # the novel has dozens. Continue beyond the displayed last link.
                 root=story_path.rstrip("/")
                 scanned={int(m.group(1)) for p in pending
-                         if (m:=re.fullmatch(re.escape(root)+r"/trang-(\\d+)/?",urlparse(p).path,re.I))}
+                         if (m:=re.fullmatch(re.escape(root)+r"/trang-(\d+)/?",urlparse(p).path,re.I))}
                 next_page=max(scanned,default=0)+1
                 empty_batches=0
                 while next_page<=120 and empty_batches<2:

@@ -1295,7 +1295,7 @@ async def discover(req:ReadRequest):
 async def atlantis_chapter_text(url):
     """Read Atlantis declarative shadow-root paragraphs, excluding hidden noise."""
     target=normalized_url(url,url)
-    if not target or not re.search(r"/chuong/c\\d+/?$",urlparse(target).path):
+    if not target or not re.search(r"/chuong/c\d+/?$",urlparse(target).path):
         raise HTTPException(400,"URL chương Atlantis không hợp lệ.")
     async with httpx.AsyncClient(timeout=25,follow_redirects=True,headers={"User-Agent":"Mozilla/5.0","Accept":"text/html"}) as client:
         try:
@@ -1311,14 +1311,14 @@ async def atlantis_chapter_text(url):
         for para in template.select(".c > .p, div.p"):
             for noise in para.select('.nx,[aria-hidden="true"],button.pc,script,style'):
                 noise.decompose()
-            value=para.get_text("",strip=False).replace("\\xa0"," ").strip()
+            value=para.get_text("",strip=False).replace("\xa0"," ").strip()
             if value:
                 paragraphs.append(value)
     if not paragraphs:
         raise HTTPException(422,"Atlantis: không tìm thấy văn bản trong Shadow DOM của chương; không dùng nội dung trang thay thế.")
     heading=soup.select_one("article header h1 span, article h1 span, article h1")
     title=heading.get_text(" ",strip=True) if heading else ""
-    return title,"\\n\\n".join(paragraphs)
+    return title,"\n\n".join(paragraphs)
 
 @app.post("/batch")
 async def batch(req:BatchRequest):

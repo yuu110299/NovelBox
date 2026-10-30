@@ -102,6 +102,14 @@ async function loadStory(){
    };
    discovered=discovered.map((ch,i)=>({...ch,__order:i})).sort((a,b)=>{const x=chapterKey(a),y=chapterKey(b);return x[0]-y[0]||x[1]-y[1]||a.__order-b.__order}).map(({__order,...ch})=>ch);
   }
+  if(u.hostname.endsWith('truyenfull.live')){
+   const path=u.pathname.replace(/\\/$/,'');
+   if(path==='/oan-cot-phong-trien-tuyet-the-nhat-can-thong-a'){
+    data.title='Oán Cốt Phong Triền - Tuyệt Thế Nhất Căn Thông A';
+   }else if(/^(?:\\*\\*)?\\s*(?:Tên truyện\\s*:\\s*)?(?:Chương|Chuong|Chapter|Chap|Ngoại truyện)\\s*\\d+\\b/i.test(String(data.title||''))){
+    throw Error('API trả tên chương thay vì tên truyện; đã chặn tên sách sai.');
+   }
+  }
   storyMeta={title:data.title||"",author:data.author||"",description:data.description||"",categories:data.categories||[],cover:data.cover||"",story_url:data.story_url||""};
   if(u.hostname.endsWith("truyenfull.live")&&u.pathname.replace(/\/$/,"")==="/vinh-quang-gianh-lay-nam-chinh")storyMeta.title="Vinh Quang Giành Lấy Nam Chính";
   if(u.hostname.endsWith("truyenfull.live")&&u.pathname.replace(/\/$/,"")==="/toi-lam-bac-si-gia-dinh-trong-tieu-thuyet-tong-giam-doc-ba-dao"){
@@ -147,7 +155,7 @@ async function loadStory(){
   for(const [name,val] of [["Tên truyện",storyMeta.title],["Tác giả",storyMeta.author],["Thể loại",storyMeta.categories.join(", ")],["Mô tả",storyMeta.description]]){if(val){const p=document.createElement("p");const b=document.createElement("strong");b.textContent=name+": ";p.append(b,document.createTextNode(val));if(name==="Mô tả"&&val.length>450){p.style.maxHeight="9em";p.style.overflow="hidden";const toggle=document.createElement("button");toggle.type="button";toggle.className="alt";toggle.textContent="Xem thêm";toggle.style.marginBottom="12px";toggle.onclick=()=>{const expanded=p.style.maxHeight==="none";p.style.maxHeight=expanded?"9em":"none";toggle.textContent=expanded?"Xem thêm":"Thu gọn";toggle.setAttribute("aria-expanded",String(!expanded))};toggle.setAttribute("aria-expanded","false");details.append(p,toggle)}else details.append(p)}}
   layout.append(details);meta.append(layout);
   downloaded=[];
-  if(data.title)$('title').value=data.title;
+  if(storyMeta.title)$('title').value=storyMeta.title;
   if(data.author)$('author').value=data.author;
   $('end').value=discovered.length||1;
   $('chapterinfo').textContent='Đã tìm thấy '+discovered.length+' chương. '+(data.truncated?'Danh sách có thể chưa đầy đủ. ':'')+'Chọn phạm vi rồi nhấn “Tải nội dung các chương đã chọn”.';

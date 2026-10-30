@@ -959,27 +959,20 @@ async def discover(req:ReadRequest):
             if chapter_heading.match(title):
                 raise HTTPException(422,"Không tìm được tên truyện hợp lệ từ trang nguồn.")
             if (urlparse(req.url).hostname or "").lower().endswith("truyenfull.live"):
-                # Override all generic og:title / chapter-title / slug fallbacks.
-                # Always read the book's own heading from its landing page.
-                requested_path=urlparse(req.url).path
-                landing_path=re.sub(r"/(?:trang|chuong|chapter|chap)-\\d+(?:-[^/]*)?/?$", "/", requested_path, flags=re.I)
-                landing_url=urlunparse((u.scheme,u.netloc,landing_path,"","",""))
-                # Always fetch the landing page separately: redirects or pagination
-                # can leave soup pointing at a chapter even for a story URL.
+                # Book identity comes only from the landing page, never a chapter.
+                requested=urlparse(req.url)
+                story_path=re.sub(r"/(?:trang|chuong|chapter|chap)-[0-9]+(?:-[^/]*)?/?$", "/", requested.path, flags=re.I)
+                landing_url=urlunparse((requested.scheme,requested.netloc,story_path,"","",""))
                 landing_soup,landing_final_url=await get_page(client,landing_url)
-                if re.search(r"/(?:chuong|chapter|chap)-\\d+",urlparse(landing_final_url).path,re.I):
-                    raise HTTPException(422,"TruyenFull chuyển hướng trang truyện sang trang chương; không thể xác định tên truyện an toàn.")
+                if re.search(r"/(?:chuong|chapter|chap)-[0-9]+",urlparse(landing_final_url).path,re.I):
+                    raise HTTPException(422,"TruyenFull: trang truyện chuyển hướng sang trang chương.")
                 heading=landing_soup.select_one('h3.title[itemprop="name"]')
                 if not heading:
-                    raise HTTPException(422,"TruyenFull: trang thông tin không có h3.title[itemprop=name]; không lấy tên chương thay thế.")
-                actual_title=html.unescape(heading.get_text(" ",strip=True)).replace("\\u00a0"," ").strip()
-                # Reject metadata labels and chapter headings, even when encoded
-                # or wrapped in the expected element.
+                    raise HTTPException(422,"TruyenFull: không tìm thấy tiêu đề truyện trong h3.title[itemprop=name].")
+                actual_title=html.unescape(heading.get_text(" ",strip=True)).replace("\u00a0"," ").strip()
                 actual_title=re.sub(r"^(?:Tên truyện|Title)\\s*[:：]\\s*","",actual_title,flags=re.I).strip()
-                if re.match(r"^(?:Chương|Chuong|Chapter|Chap|Ngoại truyện)\\s*\\d+\\b",actual_title,re.I):
-                    raise HTTPException(422,"TruyenFull: thẻ tên truyện chứa tiêu đề chương, không thể dùng làm tên sách.")
-                if not actual_title or chapter_heading.match(actual_title):
-                    raise HTTPException(422,"TruyenFull: tên truyện không hợp lệ trong thẻ h3.title[itemprop=name].")
+                if not actual_title or re.match(r"^(?:Chương|Chuong|Chapter|Chap|Ngoại truyện)\\s*[0-9]+\\b",actual_title,re.I):
+                    raise HTTPException(422,"TruyenFull: tiêu đề không hợp lệ hoặc là tên chương.")
                 title=actual_title
             author=soup.select_one("span#storyAuthor,[itemprop='author'],.author")
             author_name=author.get_text(" ",strip=True) if author else ""

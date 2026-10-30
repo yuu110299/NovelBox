@@ -489,6 +489,19 @@ def page_links(soup,base,story_path):
             href=normalized_url(base,story_path.rstrip("/")+"/chuong/page/"+str(n)+"/")
             if href and href not in result:result.append(href)
         return result[:150]
+    if (urlparse(base).hostname or "").lower().endswith("truyenfull.live"):
+        root=story_path.rstrip("/")
+        pages=set()
+        for a in soup.select("a[href]"):
+            href=normalized_url(base,a.get("href",""))
+            if not href:continue
+            parsed=urlparse(href)
+            if parsed.hostname!=(urlparse(base).hostname or "").lower():continue
+            match=re.fullmatch(re.escape(root)+r"/trang-(\d+)/?",parsed.path,re.I)
+            if match:pages.add(int(match.group(1)))
+        if pages:
+            last=min(max(pages),200)
+            return [normalized_url(base,root+"/trang-"+str(n)+"/") for n in range(1,last+1)]
     for a in soup.select(".pagination a[href],.pagination-container a[href],a[href*='page='],a[href*='/trang-']"):
         href=normalized_url(base,a.get("href",""))
         if href and urlparse(href).path.rstrip("/").startswith(story_path.rstrip("/")) and href not in result:result.append(href)
@@ -793,6 +806,11 @@ async def discover(req:ReadRequest):
     u=urlparse(req.url.strip())
     if u.scheme!="https" or not u.hostname or not allowed(u.hostname.lower()) or u.port not in (None,443):
         raise HTTPException(400,"Nguồn chưa được hỗ trợ hoặc URL không hợp lệ.")
+    if (u.hostname or "").lower().endswith("truyenfull.live"):
+        match=re.match(r"^(/[^/]+)/trang-\d+/?$",u.path,re.I)
+        if match:
+            req=ReadRequest(url=urlunparse((u.scheme,u.netloc,match.group(1)+"/","","","")),source=req.source)
+            u=urlparse(req.url)
     if (u.hostname or "").lower().endswith("dualeotruyenfull.net"):
         match=re.match(r"^(/doc-truyen/[^/]+)/chuong-\d+/?$",u.path,re.I)
         if match:
@@ -892,7 +910,7 @@ async def discover(req:ReadRequest):
                 except (httpx.HTTPError,HTTPException):return []
             # Do not refetch the same pagination URL or reparse pages when the
             # main page already exposes the complete chapter list.
-            pending=list(dict.fromkeys(p for p in pages[:150 if (urlparse(base).hostname or "").lower().endswith("dualeotruyenfull.net") else 30] if p!=base))
+            pending=list(dict.fromkeys(p for p in pages[:200 if (urlparse(base).hostname or "").lower().endswith("truyenfull.live") else 150 if (urlparse(base).hostname or "").lower().endswith("dualeotruyenfull.net") else 30] if p!=base))
             if pending:
                 limiter=asyncio.Semaphore(10 if (urlparse(base).hostname or "").lower().endswith("dualeotruyenfull.net") else 8)
                 async def limited_listing(page):
@@ -919,6 +937,12 @@ async def discover(req:ReadRequest):
                         if next_page not in visited and next_page not in queue:
                             queue.append(next_page)
                 found=dict(sorted(found.items(),key=lambda pair:int(re.search(r"Chương\s*(\d+)",pair[1]["title"],re.I).group(1)) if re.search(r"Chương\s*(\d+)",pair[1]["title"],re.I) else 10**9))
+            if (urlparse(base).hostname or "").lower().endswith("truyenfull.live"):
+                def truyenfull_number(item):
+                    match=re.search(r"(?:Chương|Chuong|Chapter)\s*[-:#]?\s*(\d+)",item["title"],re.I)
+                    if not match:match=re.search(r"(?:chuong|chapter)[-_]?(\d+)",urlparse(item["url"]).path,re.I)
+                    return int(match.group(1)) if match else 10**9
+                found=dict(sorted(found.items(),key=lambda pair:truyenfull_number(pair[1])))
             if (urlparse(base).hostname or "").lower().endswith("dualeotruyenfull.net"):
                 found=dict(sorted(found.items(),key=lambda pair:int(re.search(r"Chương\s*(\d+)",pair[1]["title"],re.I).group(1)) if re.search(r"Chương\s*(\d+)",pair[1]["title"],re.I) else 10**9))
             def meta(selector):

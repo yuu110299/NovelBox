@@ -1958,7 +1958,14 @@ async def discover(req:ReadRequest):
     if (u.hostname or "").lower().endswith("atlantisviendong.com"):
         # Atlantis is a React application. Do not use generic site metadata or
         # invent a chapter list if its public HTML does not contain one.
-        soup,base=await atlantis_rendered_html(req.url)
+        # Prefer public HTML: Playwright Chromium may not be installed on Render.
+        async with httpx.AsyncClient(timeout=30,follow_redirects=True,headers={"User-Agent":"Mozilla/5.0","Accept":"text/html"}) as at_client:
+            try:
+                soup,base=await get_page(at_client,req.url)
+            except Exception:
+                soup,base=await atlantis_rendered_html(req.url)
+        if not soup.select('a[href*="/chuong/c"]'):
+            soup,base=await atlantis_rendered_html(req.url)
         story_path=urlparse(base).path.rstrip("/")
         if not story_path.startswith("/truyen/"):
             raise HTTPException(400,"Hãy nhập URL trang thông tin truyện Atlantis.")

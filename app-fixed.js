@@ -103,10 +103,10 @@ async function loadStory(){
    discovered=discovered.map((ch,i)=>({...ch,__order:i})).sort((a,b)=>{const x=chapterKey(a),y=chapterKey(b);return x[0]-y[0]||x[1]-y[1]||a.__order-b.__order}).map(({__order,...ch})=>ch);
   }
   if(u.hostname.endsWith('truyenfull.live')){
-   const path=u.pathname.replace(/\\/$/,'');
+   const path=u.pathname.replace(/\/$/,'');
    if(path==='/oan-cot-phong-trien-tuyet-the-nhat-can-thong-a'){
     data.title='Oán Cốt Phong Triền - Tuyệt Thế Nhất Căn Thông A';
-   }else if(/^(?:\\*\\*)?\\s*(?:Tên truyện\\s*:\\s*)?(?:Chương|Chuong|Chapter|Chap|Ngoại truyện)\\s*\\d+\\b/i.test(String(data.title||''))){
+   }else if(/^(?:\*\*)?\s*(?:Tên truyện\s*:\s*)?(?:Chương|Chuong|Chapter|Chap|Ngoại truyện)\s*\d+\b/i.test(String(data.title||''))){
     throw Error('API trả tên chương thay vì tên truyện; đã chặn tên sách sai.');
    }
   }

@@ -803,6 +803,10 @@ async def inkitt_info(client, story_url):
 
 @app.post("/discover")
 async def discover(req:ReadRequest):
+    # The first registered FastAPI /discover route handles requests.
+    # Delegate Atlantis to the dedicated parser defined later in this module.
+    if (urlparse(req.url.strip()).hostname or "").lower().endswith("atlantisviendong.com"):
+        return await discover_atlantis(req)
     source=check_selected_source(req.url,req.source)
     u=urlparse(req.url.strip())
     if u.scheme!="https" or not u.hostname or not allowed(u.hostname.lower()) or u.port not in (None,443):
@@ -2438,3 +2442,7 @@ async def luotnovel_discover(url):
         except HTTPException:
             pass
     return {"title":title,"author":"","chapters":list(found.values()),"count":len(found)}
+
+
+# Alias the Atlantis-capable parser; the earlier registered route delegates to it.
+discover_atlantis = discover

@@ -920,6 +920,19 @@ async def discover(req:ReadRequest):
                     except (HTTPException,httpx.HTTPError):
                         pass
                 title=root_title or root_path.strip("/").split("/")[-1].replace("-"," ").title()
+            # Truyenfull sometimes returns escaped Markdown ("**Tên truyện:**")
+            # and an encoded chapter heading instead of the book title.
+            if (urlparse(base).hostname or "").lower().endswith("truyenfull.live"):
+                title=html.unescape(title or "").replace("\\u00a0"," ").strip()
+                clean_title=re.sub(r"^(?:\\*\\*|__)?\\s*(?:Tên truyện|Title)\\s*:\\s*(?:\\*\\*|__)?\\s*","",title,flags=re.I).strip(" *_:")
+                if re.match(r"^(?:Chương|Chuong|Chapter|Chap)\\s*\\d+\\b",clean_title,re.I):
+                    story_slug=urlparse(req.url).path.strip("/").split("/")[0]
+                    if story_slug and not re.match(r"^(?:chuong|chapter|chap)[-_]?\\d+",story_slug,re.I):
+                        title=story_slug.replace("-"," ").replace("_"," ").title()
+                    else:
+                        raise HTTPException(422,"Truyenfull trả về tiêu đề chương thay vì tên truyện.")
+                elif clean_title:
+                    title=clean_title
             # Final, source-independent title validation. Some providers redirect
             # the landing page to the last chapter; their og:title is a chapter.
             # Never send such a heading to the UI or exported book metadata.

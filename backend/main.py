@@ -1802,15 +1802,17 @@ async def atlantis_rendered_html(url):
             try:
                 page=await browser.new_page(locale="vi-VN")
                 await page.goto(target.split("#",1)[0],wait_until="domcontentloaded",timeout=35000)
+                # Atlantis renders its TOC under section#muc-luc (not a tab).
+                # Scroll to it and wait for actual chapter links, not review metadata.
                 try:
-                    await page.locator('a[href="#muc-luc"], button:has-text("Mục lục"), [role="tab"]:has-text("Mục lục")').first.click(timeout=3500)
+                    await page.locator("#muc-luc").scroll_into_view_if_needed(timeout=12000)
                 except Exception:
                     pass
                 try:
-                    await page.locator(".review-prose, a[href*='/chuong/c']").first.wait_for(timeout=12000)
+                    await page.locator('#muc-luc a[href*="/chuong/c"]').first.wait_for(state="attached",timeout=25000)
                 except Exception:
                     pass
-                await page.wait_for_timeout(1600)
+                await page.wait_for_timeout(1200)
                 html=await page.content()
                 return BeautifulSoup(html,"html.parser"),page.url
             finally:

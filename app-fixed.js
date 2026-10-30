@@ -110,8 +110,8 @@ async function loadStory(){
     // Keep the chapter list usable even when a stale API responds with a chapter title.
     // The canonical story slug is safer than displaying a chapter as the book name.
     const slug=path.split('/').filter(Boolean)[0]||'';
-    if(!slug||/^(?:chuong|chapter|chap)-?\\d+/i.test(slug))throw Error('Không xác định được tên truyện từ URL; vui lòng nhập liên kết trang truyện.');
-    data.title=decodeURIComponent(slug).replace(/[-_]+/g,' ').replace(/\\b\\p{L}/gu,c=>c.toLocaleUpperCase('vi-VN'));
+    if(!slug||/^(?:chuong|chapter|chap)-?\d+/i.test(slug))throw Error('Không xác định được tên truyện từ URL; vui lòng nhập liên kết trang truyện.');
+    data.title=decodeURIComponent(slug).replace(/[-_]+/g,' ').replace(/\b\p{L}/gu,c=>c.toLocaleUpperCase('vi-VN'));
    }
   }
   storyMeta={title:data.title||"",author:data.author||"",description:data.description||"",categories:data.categories||[],cover:data.cover||"",story_url:data.story_url||""};

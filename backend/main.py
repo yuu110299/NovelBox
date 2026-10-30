@@ -1839,7 +1839,7 @@ async def discover(req:ReadRequest):
                 if strong:
                     key=strong.get_text(" ",strip=True).rstrip(":：").strip()
                     value=paragraph.get_text(" ",strip=True)
-                    value=re.sub(r"^"+re.escape(key)+r"\\s*[:：]\\s*","",value).strip()
+                    value=re.sub(r"^"+re.escape(key)+r"\s*[:：]\s*","",value).strip()
                     fields[key]=value
         cover_node=soup.select_one('img[src^="/api/media/"]')
         cover=urljoin(base,cover_node.get("src")) if cover_node else ""
@@ -1848,15 +1848,15 @@ async def discover(req:ReadRequest):
         for a in soup.select('a[href*="/chuong/c"]'):
             link=urljoin(base,a.get("href",""))
             parsed=urlparse(link)
-            if parsed.hostname!=(urlparse(base).hostname) or not re.fullmatch(re.escape(story_path)+r"/chuong/c\\d+/?",parsed.path):
+            if parsed.hostname!=(urlparse(base).hostname) or not re.fullmatch(re.escape(story_path)+r"/chuong/c\d+/?",parsed.path):
                 continue
             if link in seen:continue
             seen.add(link)
             chapter_items.append({"title":a.get_text(" ",strip=True) or "Chương "+str(len(chapter_items)+1),"url":link})
-        chapter_items.sort(key=lambda x:int(re.search(r"/chuong/c(\\d+)",x["url"]).group(1)))
+        chapter_items.sort(key=lambda x:int(re.search(r"/chuong/c(\d+)",x["url"]).group(1)))
         if not chapter_items:
             raise HTTPException(422,"Atlantis dùng giao diện JavaScript; máy chủ chưa đọc được mục lục từ HTML công khai. Không thể tự suy đoán danh sách chương.")
-        return {"title":fields.get("Tên truyện") or (soup.h1.get_text(" ",strip=True) if soup.h1 else ""), "author":fields.get("Tác giả",""),"description":"\\n".join(f"{k}: {v}" for k,v in fields.items()),"cover":cover,"categories":[v.strip() for v in fields.get("Thể loại","").split(",") if v.strip()],"chapters":chapter_items,"count":len(chapter_items),"story_url":base}
+        return {"title":fields.get("Tên truyện") or (soup.h1.get_text(" ",strip=True) if soup.h1 else ""), "author":fields.get("Tác giả",""),"description":"\n".join(f"{k}: {v}" for k,v in fields.items()),"cover":cover,"categories":[v.strip() for v in fields.get("Thể loại","").split(",") if v.strip()],"chapters":chapter_items,"count":len(chapter_items),"story_url":base}
     if (u.hostname or "").lower().endswith("luotnovel1.site"):
         return await luotnovel_discover(req.url)
     if (u.hostname or "").lower().endswith("inkitt.com") and re.search(r"/stories/\d+",u.path):

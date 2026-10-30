@@ -2051,19 +2051,27 @@ async def discover(req:ReadRequest):
             else:
                 title=(soup.select_one("meta[property='og:title']") or {}).get("content","") or (soup.h1.get_text(" ",strip=True) if soup.h1 else "")
             if (urlparse(base).hostname or "").lower().endswith("truyenfull.live"):
-                # The final /discover handler must use the story heading, never a chapter heading.
-                story_heading=soup.select_one('h3.title[itemprop="name"]')
-                if story_heading:
-                    title=story_heading.get_text(" ",strip=True)
+                # Resolve identity from the book information panel on the landing page.
+                # Never trust og:title or the first chapter's h1 for book identity.
+                original=urlparse(req.url)
+                story_root=re.sub(r"/(?:trang-\d+|chuong-\d+(?:-[^/]*)?)/?$","/",original.path,flags=re.I)
+                landing=urlunparse((original.scheme,original.netloc,story_root,"","",""))
+                if urlparse(base).path.rstrip("/")!=story_root.rstrip("/"):
+                    book_soup,book_base=await get_page(client,landing)
                 else:
-                    for selector in ('.book-info h3[itemprop="name"]', '.story-info [itemprop="name"]', '.book-info h1', '.story-info h1'):
-                        node=soup.select_one(selector)
-                        if node and node.get_text(" ",strip=True):
-                            title=node.get_text(" ",strip=True)
-                            break
-                title=html.unescape(title).strip()
-                if re.match(r"^(?:Chương|Chapter|Chap|Ngoại truyện)\\s*\\d+\\b",title,re.I) or not title:
-                    raise HTTPException(422,"TruyenFull: không xác định được tên truyện từ trang thông tin; không dùng tên chương thay thế.")
+                    book_soup,book_base=soup,base
+                candidates=book_soup.select('h3.title[itemprop="name"], .book-info h3.title, .info h3.title, .book-info [itemprop="name"]')
+                book_title=""
+                for node in candidates:
+                    candidate=html.unescape(node.get_text(" ",strip=True)).replace("\xa0"," ").strip()
+                    candidate=re.sub(r"^(?:Tên truyện|Title)\s*[:：]\s*","",candidate,flags=re.I)
+                    if candidate and not re.match(r"^(?:Chương|Chuong|Chapter|Chap|Ngoại truyện)\s*\d+\b",candidate,re.I):
+                        book_title=candidate
+                        break
+                if not book_title:
+                    raise HTTPException(422,"TruyenFull: không tìm thấy tên truyện trong khối thông tin sách; không lấy tên chương thay thế.")
+                title=book_title
+                soup,base=book_soup,book_base
             author=soup.select_one("span#storyAuthor,[itemprop='author'],.author")
             author_name=author.get_text(" ",strip=True) if author else ""
             if (urlparse(base).hostname or "").lower().endswith("navyteams.com"):

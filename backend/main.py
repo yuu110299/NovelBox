@@ -1870,7 +1870,11 @@ async def discover(req:ReadRequest):
                     value=paragraph.get_text(" ",strip=True)
                     value=re.sub(r"^"+re.escape(key)+r"\s*[:：]\s*","",value).strip()
                     fields[key]=value
-        cover_node=soup.select_one('section img[src^="/api/media/"], img[src^="/api/media/"]')
+        # Prefer the actual story cover (portrait image in the story header).
+        # Avoid selecting an unrelated media thumbnail from another section.
+        cover_node=soup.select_one('img[alt][src^="/api/media/"][class*="aspect-"], img[alt][src^="/api/media/"][class*="object-cover"]')
+        if not cover_node:
+            cover_node=soup.select_one('section img[alt][src^="/api/media/"]')
         cover=urljoin(base,cover_node.get("src")) if cover_node else ""
         chapter_items=[]
         seen=set()

@@ -1111,7 +1111,7 @@ async def discover(req:ReadRequest):
             if not (wattpad_data and wattpad_data['parts']):
                 # NavyTeams lists newest first; stable sorting restores chapter 1 -> N -> extras.
                 chapters.sort(key=order)
-            return {"title":title[:200],"author":author.get_text(" ",strip=True)[:120] if author else "","description":description[:15000],"cover":cover,"categories":categories[:30],"chapters":chapters[:1000],"count":len(chapters),"truncated":len(pages)>12 or len(chapters)>1000}
+            return {"title":title[:200],"author":author.get_text(" ",strip=True)[:120] if author else "","description":description[:15000],"cover":cover,"categories":categories[:30],"chapters":chapters[:3000] if (urlparse(base).hostname or "").lower().endswith("truyenfull.live") else chapters[:1000],"count":len(chapters),"truncated":len(chapters)>(3000 if (urlparse(base).hostname or "").lower().endswith("truyenfull.live") else 1000)}
     except httpx.HTTPStatusError as exc:
         status=exc.response.status_code
         raise HTTPException(502,f"Máy chủ nguồn trả HTTP {status}. "+("Website có thể đang chặn truy cập từ Render." if status in (403,429,503) else "Không thể tải trang truyện.")) from exc

@@ -973,6 +973,11 @@ async def discover(req:ReadRequest):
                 if not heading:
                     raise HTTPException(422,"TruyenFull: trang thông tin không có h3.title[itemprop=name]; không lấy tên chương thay thế.")
                 actual_title=html.unescape(heading.get_text(" ",strip=True)).replace("\\u00a0"," ").strip()
+                # Reject metadata labels and chapter headings, even when encoded
+                # or wrapped in the expected element.
+                actual_title=re.sub(r"^(?:Tên truyện|Title)\\s*[:：]\\s*","",actual_title,flags=re.I).strip()
+                if re.match(r"^(?:Chương|Chuong|Chapter|Chap|Ngoại truyện)\\s*\\d+\\b",actual_title,re.I):
+                    raise HTTPException(422,"TruyenFull: thẻ tên truyện chứa tiêu đề chương, không thể dùng làm tên sách.")
                 if not actual_title or chapter_heading.match(actual_title):
                     raise HTTPException(422,"TruyenFull: tên truyện không hợp lệ trong thẻ h3.title[itemprop=name].")
                 title=actual_title

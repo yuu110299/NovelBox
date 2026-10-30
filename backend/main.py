@@ -1873,7 +1873,7 @@ async def discover(req:ReadRequest):
         for a in soup.select('a[href*="/chuong/c"]'):
             link=urljoin(base,a.get("href",""))
             parsed=urlparse(link)
-            if parsed.hostname!=(urlparse(base).hostname) or not re.fullmatch(re.escape(story_path)+r"/chuong/c\d+/?",parsed.path):
+            if parsed.hostname!=(urlparse(base).hostname) or not re.fullmatch(r"/chuong/c\d+/?",parsed.path,flags=re.I):
                 continue
             if link in seen:continue
             seen.add(link)

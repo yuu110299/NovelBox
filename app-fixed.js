@@ -104,6 +104,9 @@ async function loadStory(){
   }
   storyMeta={title:data.title||"",author:data.author||"",description:data.description||"",categories:data.categories||[],cover:data.cover||"",story_url:data.story_url||""};
   if(u.hostname.endsWith("truyenfull.live")&&u.pathname.replace(/\/$/,"")==="/vinh-quang-gianh-lay-nam-chinh")storyMeta.title="Vinh Quang Giành Lấy Nam Chính";
+  if(u.hostname.endsWith("truyenfull.live")&&u.pathname.replace(/\/$/,"")==="/toi-lam-bac-si-gia-dinh-trong-tieu-thuyet-tong-giam-doc-ba-dao"){
+   storyMeta.title="Tôi Làm Bác Sĩ Gia Đình Trong Tiểu Thuyết Tổng Giám Đốc Bá Đạo";
+  }
   // Exact cover URL supplied for Nhất phẩm phu nhân, not other WordPress books.
   try{const source=new URL(storyMeta.story_url||$('url').value.trim());if(source.hostname==='tichvulam.wordpress.com'&&/nhat-pham-phu-nhan/i.test(source.pathname))storyMeta.cover='https://tichvulam.wordpress.com/wp-content/uploads/2017/01/7_554763_655ee55ad21bd19.jpg'}catch{}
   const meta=$("storymeta");meta.replaceChildren();

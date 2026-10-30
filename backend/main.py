@@ -974,6 +974,10 @@ async def discover(req:ReadRequest):
                 if not actual_title or re.match(r"^(?:Chương|Chuong|Chapter|Chap|Ngoại truyện)\\s*[0-9]+\\b",actual_title,re.I):
                     raise HTTPException(422,"TruyenFull: tiêu đề không hợp lệ hoặc là tên chương.")
                 title=actual_title
+                # Use the same verified story page for all metadata. The original
+                # soup can contain chapter/pagination content and rating widgets.
+                soup=landing_soup
+                base=landing_final_url
             author=soup.select_one("span#storyAuthor,[itemprop='author'],.author")
             author_name=author.get_text(" ",strip=True) if author else ""
             if (urlparse(base).hostname or "").lower().endswith("navyteams.com"):
@@ -1156,6 +1160,15 @@ async def discover(req:ReadRequest):
             description=re.sub(r"\s*(?:Xem thêm|Thu gọn|Đọc thêm|Show more|Read more)\s*$","",description,flags=re.I).strip()
             host=(urlparse(base).hostname or "").lower()
             if host.endswith("truyenfull.live"):
+                # The book synopsis lives in the story description, not the
+                # surrounding rating widget or generic info panel.
+                synopsis=soup.select_one(".desc-text")
+                if synopsis:
+                    for junk in synopsis.select(".rate,.rate-holder,.rate-text,script,style"):
+                        junk.decompose()
+                    clean_synopsis=synopsis.get_text("\\n",strip=True)
+                    if clean_synopsis:
+                        description=clean_synopsis
                 # The og:image URL can be a broken =w0-h0-c variant. Use the
                 # actual visible cover image on the Truyenfull story page.
                 visible=soup.select_one('img[itemprop="image"][src*="googleusercontent.com/pw/"]') or soup.select_one('img[itemprop="image"][data-src*="googleusercontent.com/pw/"]') or soup.select_one('img[src*="googleusercontent.com/pw/"],img[data-src*="googleusercontent.com/pw/"]')

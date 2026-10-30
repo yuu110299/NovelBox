@@ -1044,8 +1044,8 @@ async def discover(req:ReadRequest):
                         if attempt<2:await asyncio.sleep(attempt+1)
             if (urlparse(base).hostname or "").lower().endswith("truyenfull.live"):
                 def truyenfull_number(item):
-                    match=re.search(r"(?:Chương|Chuong|Chapter)\s*[-:#]?\s*(\d+)",item["title"],re.I)
-                    if not match:match=re.search(r"(?:chuong|chapter)[-_]?(\d+)",urlparse(item["url"]).path,re.I)
+                    match=re.search(r"/(?:chuong|chapter)[-_]?(\d+)(?:[-/]|$)",urlparse(item["url"]).path,re.I)
+                    if not match:match=re.search(r"(?:Chương|Chuong|Chapter)\s*[-:#]?\s*(\d+)",item["title"],re.I)
                     return int(match.group(1)) if match else 10**9
                 found=dict(sorted(found.items(),key=lambda pair:truyenfull_number(pair[1])))
             if (urlparse(base).hostname or "").lower().endswith("dualeotruyenfull.net"):
@@ -1184,24 +1184,6 @@ async def discover(req:ReadRequest):
                 if not categories:
                     raw=label("[itemprop=genre],.genres,.genre,.book-tags")
                     categories=[x.strip() for x in raw.split(",") if x.strip()]
-            if (urlparse(req.url).hostname or "").lower().endswith("truyenfull.live") and u.path.rstrip("/")=="/toi-lam-bac-si-gia-dinh-trong-tieu-thuyet-tong-giam-doc-ba-dao":
-                root=u.path.rstrip("/")
-                numbers=set()
-                for item in found.values():
-                    m=re.search(r"/chuong-(\d+)(?:[-/]|$)",urlparse(item["url"]).path,re.I)
-                    if m:numbers.add(int(m.group(1)))
-                async def recover(n):
-                    target=urlunparse((u.scheme,u.netloc,root+"/chuong-"+str(n)+"/","","",""))
-                    try:
-                        page,actual=await get_page(client,target)
-                        if not re.fullmatch(re.escape(root)+r"/chuong-"+str(n)+r"/?",urlparse(actual).path,re.I):return None
-                        heading=page.select_one("h2,h1,.chapter-title,.chapter-name")
-                        label=heading.get_text(" ",strip=True) if heading else ""
-                        if not re.search(r"(?:Chương|Chuong|Chapter)\s*"+str(n)+r"\b",label,re.I):return None
-                        return {"url":actual,"title":label[:180]}
-                    except (HTTPException,httpx.HTTPError):return None
-                for item in await asyncio.gather(*(recover(n) for n in range(1,97) if n not in numbers)):
-                    if item:found[item["url"]]=item
             chapters=list(found.values())
             def order(x):
                 label=x["title"].strip()

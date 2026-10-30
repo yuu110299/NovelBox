@@ -14,7 +14,7 @@ from pydantic import BaseModel
 app = FastAPI(title="Reedtt Reader API")
 app.add_middleware(CORSMiddleware, allow_origins=["https://yuu110299.github.io", "https://ginginji1102.github.io", "https://truyen-reader-demo.vercel.app"], allow_origin_regex=r"https://[a-z0-9-]+\.onrender\.com", allow_methods=["GET","POST"], allow_headers=["*"])
 
-ALLOWED = ("truyenfull.live", "wattpad.com", "wordpress.com", "navyteams.com", "inkitt.com", "giatocvuongtai.com", "luotnovel1.site", "dualeotruyenfull.net")
+ALLOWED = ("truyenfull.live", "wattpad.com", "wordpress.com", "navyteams.com", "inkitt.com", "giatocvuongtai.com", "luotnovel1.site", "dualeotruyenfull.net", "atlantisviendong.com")
 SELECTORS = ("#chapter-content", "#chapterContent", "#chapter-content-body", ".chapter-reading", ".chapter-body", ".chapter-text", ".reading-content", ".entry-content", ".chapter-content", ".reading-content", ".entry-content", ".chapter-c", "article", "[itemprop=articleBody]")
 SOURCE_HOSTS = {
     "wattpad.com": "wattpad",
@@ -25,6 +25,7 @@ SOURCE_HOSTS = {
     "luotnovel1.site": "luotnovel",
     "inkitt.com": "inkitt",
     "dualeotruyenfull.net": "dualeo",
+    "atlantisviendong.com": "atlantis",
 }
 
 def source_for_url(url: str) -> str:

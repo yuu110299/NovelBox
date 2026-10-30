@@ -1959,10 +1959,10 @@ async def discover(req:ReadRequest):
             # Atlantis stores the chapter label and subtitle in two separate spans.
             # Ignore word counts, view totals and comment totals.
             title_span=a.select_one("span.block.font-montserrat.font-semibold, span[class*=uppercase][class*=truncate]")
-            subtitle_span=a.select_one("span.block.font-montserrat.font-medium.text-\\[\\#A064E8\\], span[class*=font-medium][class*=truncate]")
+            subtitle_span=a.select_one("span.block.font-montserrat.font-medium, span[class*=font-medium][class*=truncate]")
             chapter_title=title_span.get_text(" ",strip=True) if title_span else ""
             subtitle=subtitle_span.get_text(" ",strip=True) if subtitle_span else ""
-            subtitle=re.sub(r"\\s*[-–—]?\\s*[\\d.,]+\\s*chữ\\s*$","",subtitle,flags=re.I).strip(" -–—")
+            subtitle=re.sub(r"\s*[-–—]?\s*[\d.,]+\s*chữ\s*$","",subtitle,flags=re.I).strip(" -–—")
             if subtitle and subtitle.casefold()!=chapter_title.casefold():
                 chapter_title=(chapter_title+" – "+subtitle).strip(" –")
             chapter_items.append({"title":chapter_title or "Chương "+str(len(chapter_items)+1),"url":link})

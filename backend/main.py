@@ -801,7 +801,7 @@ async def inkitt_info(client, story_url):
     }
 
 
-@app.post("/discover")
+@app.post("/discover-legacy")
 async def discover(req:ReadRequest):
     # The first registered FastAPI /discover route handles requests.
     # Delegate Atlantis to the dedicated parser defined later in this module.

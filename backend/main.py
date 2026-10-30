@@ -918,6 +918,25 @@ async def discover(req:ReadRequest):
                         return await listing(page)
                 for group in await asyncio.gather(*(limited_listing(p) for p in pending)):
                     for x in group:found[x["url"]]=x
+            if (urlparse(base).hostname or "").lower().endswith("truyenfull.live"):
+                # The visible paginator often shows only seven pages, even when
+                # the novel has dozens. Continue beyond the displayed last link.
+                root=story_path.rstrip("/")
+                scanned={int(m.group(1)) for p in pending
+                         if (m:=re.fullmatch(re.escape(root)+r"/trang-(\\d+)/?",urlparse(p).path,re.I))}
+                next_page=max(scanned,default=0)+1
+                empty_batches=0
+                while next_page<=120 and empty_batches<2:
+                    batch_numbers=list(range(next_page,min(next_page+5,121)))
+                    urls=[urlunparse((u.scheme,u.netloc,root+"/trang-"+str(n)+"/","","","")) for n in batch_numbers]
+                    groups=await asyncio.gather(*(limited_listing(page) for page in urls))
+                    added=0
+                    for group in groups:
+                        for chapter in group:
+                            if chapter["url"] not in found:added+=1
+                            found[chapter["url"]]=chapter
+                    empty_batches=empty_batches+1 if added==0 else 0
+                    next_page=batch_numbers[-1]+1
             if (urlparse(base).hostname or "").lower().endswith("truyenhda.cc"):
                 # Follow pagination links discovered on every listing page, not
                 # just those visible on the initial story page.

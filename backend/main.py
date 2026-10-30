@@ -1860,7 +1860,7 @@ async def discover(req:ReadRequest):
         story_path=urlparse(base).path.rstrip("/")
         if not story_path.startswith("/truyen/"):
             raise HTTPException(400,"Hãy nhập URL trang thông tin truyện Atlantis.")
-        info=soup.select_one(".review-prose")
+        info=soup.select_one("div.review-prose.break-words, div.review-prose")
         fields={}
         if info:
             for paragraph in info.select("p"):
@@ -1869,6 +1869,7 @@ async def discover(req:ReadRequest):
                     key=strong.get_text(" ",strip=True).rstrip(":：").strip()
                     value=paragraph.get_text(" ",strip=True)
                     value=re.sub(r"^"+re.escape(key)+r"\s*[:：]\s*","",value).strip()
+                    # Keep source metadata as-is; strip only incidental whitespace.
                     fields[key]=value
         # Prefer the actual story cover (portrait image in the story header).
         # Avoid selecting an unrelated media thumbnail from another section.

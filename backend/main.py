@@ -1962,7 +1962,30 @@ async def discover(req:ReadRequest):
         chapter_items.sort(key=lambda x:int(re.search(r"/chuong/c(\d+)",x["url"]).group(1)))
         if not chapter_items:
             raise HTTPException(422,"Atlantis: trình duyệt chưa lấy được liên kết /chuong/cN. HTML có "+str(len(soup.select("a[href]")))+" liên kết, "+str(len(soup.select(".review-prose")))+" khối thông tin. Có thể mục lục chưa tải hoặc website hạn chế Render.")
-        return {"title":fields.get("Tên truyện") or (soup.h1.get_text(" ",strip=True) if soup.h1 else ""), "author":fields.get("Tác giả",""),"description":"\n".join(f"{k}: {v}" for k,v in fields.items()),"cover":cover,"categories":[v.strip() for v in fields.get("Thể loại","").split(",") if v.strip()],"chapters":chapter_items,"count":len(chapter_items),"story_url":base}
+        # The review-prose panel contains metadata labels, not a standalone synopsis.
+        # Preserve the source's actual paragraphs and exclude repeated book fields.
+        from bs4 import BeautifulSoup as _AtlantisSoup
+        description_parts=[]
+        if info:
+            for paragraph in info.select("p"):
+                strong=paragraph.find("strong")
+                key=strong.get_text(" ",strip=True).rstrip(":：").strip().casefold() if strong else ""
+                if key in {"tên truyện","tác giả","thể loại","trạng thái","tình trạng","nguồn","số chương","lượt xem","đánh giá"}:
+                    continue
+                copy=_AtlantisSoup(str(paragraph),"html.parser")
+                for br in copy.select("br"):
+                    br.replace_with("\n")
+                part=copy.get_text("",strip=False).strip()
+                if part:
+                    description_parts.append(part)
+        description="\n\n".join(description_parts)
+        title=(fields.get("Tên truyện") or "").strip()
+        if not title:
+            heading=soup.select_one("main h1,article h1,section h1,h1")
+            title=heading.get_text(" ",strip=True) if heading else ""
+        if not title or re.match(r"^(?:Chương|Chuong|Chapter)\s*\d+",title,re.I):
+            raise HTTPException(422,"Atlantis: không xác định được tên truyện từ trang thông tin.")
+        return {"title":title,"author":fields.get("Tác giả",""),"description":description,"cover":cover,"categories":[v.strip() for v in fields.get("Thể loại","").split(",") if v.strip()],"chapters":chapter_items,"count":len(chapter_items),"story_url":base}
     if (u.hostname or "").lower().endswith("luotnovel1.site"):
         return await luotnovel_discover(req.url)
     if (u.hostname or "").lower().endswith("inkitt.com") and re.search(r"/stories/\d+",u.path):

@@ -2060,16 +2060,12 @@ async def discover(req:ReadRequest):
                     book_soup,book_base=await get_page(client,landing)
                 else:
                     book_soup,book_base=soup,base
-                candidates=book_soup.select('h3.title[itemprop="name"], .book-info h3.title, .info h3.title, .book-info [itemprop="name"]')
-                book_title=""
-                for node in candidates:
-                    candidate=html.unescape(node.get_text(" ",strip=True)).replace("\xa0"," ").strip()
-                    candidate=re.sub(r"^(?:Tên truyện|Title)\s*[:：]\s*","",candidate,flags=re.I)
-                    if candidate and not re.match(r"^(?:Chương|Chuong|Chapter|Chap|Ngoại truyện)\s*\d+\b",candidate,re.I):
-                        book_title=candidate
-                        break
-                if not book_title:
-                    raise HTTPException(422,"TruyenFull: không tìm thấy tên truyện trong khối thông tin sách; không lấy tên chương thay thế.")
+                heading=book_soup.select_one('h3.title[itemprop="name"]')
+                if heading is None:
+                    raise HTTPException(422,"TruyenFull: thiếu thẻ h3.title[itemprop=name] trên trang thông tin truyện.")
+                book_title=html.unescape(heading.get_text(" ",strip=True)).replace("\xa0"," ").strip()
+                if not book_title or re.match(r"^(?:Chương|Chuong|Chapter|Chap|Ngoại truyện)\s*\d+\b",book_title,re.I):
+                    raise HTTPException(422,"TruyenFull: thẻ tên truyện không hợp lệ; không lấy tên chương hay tên từ URL.")
                 title=book_title
                 soup,base=book_soup,book_base
             author=soup.select_one("span#storyAuthor,[itemprop='author'],.author")

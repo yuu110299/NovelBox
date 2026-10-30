@@ -1945,6 +1945,20 @@ async def discover(req:ReadRequest):
                     raise HTTPException(422,"NavyTeams không có tên truyện hợp lệ trong meta keywords.")
             else:
                 title=(soup.select_one("meta[property='og:title']") or {}).get("content","") or (soup.h1.get_text(" ",strip=True) if soup.h1 else "")
+            if (urlparse(base).hostname or "").lower().endswith("truyenfull.live"):
+                # The final /discover handler must use the story heading, never a chapter heading.
+                story_heading=soup.select_one('h3.title[itemprop="name"]')
+                if story_heading:
+                    title=story_heading.get_text(" ",strip=True)
+                else:
+                    for selector in ('.book-info h3[itemprop="name"]', '.story-info [itemprop="name"]', '.book-info h1', '.story-info h1'):
+                        node=soup.select_one(selector)
+                        if node and node.get_text(" ",strip=True):
+                            title=node.get_text(" ",strip=True)
+                            break
+                title=html.unescape(title).strip()
+                if re.match(r"^(?:Chương|Chapter|Chap|Ngoại truyện)\\s*\\d+\\b",title,re.I) or not title:
+                    raise HTTPException(422,"TruyenFull: không xác định được tên truyện từ trang thông tin; không dùng tên chương thay thế.")
             author=soup.select_one("span#storyAuthor,[itemprop='author'],.author")
             author_name=author.get_text(" ",strip=True) if author else ""
             if (urlparse(base).hostname or "").lower().endswith("navyteams.com"):

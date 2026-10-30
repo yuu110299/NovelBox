@@ -1184,6 +1184,24 @@ async def discover(req:ReadRequest):
                 if not categories:
                     raw=label("[itemprop=genre],.genres,.genre,.book-tags")
                     categories=[x.strip() for x in raw.split(",") if x.strip()]
+            if (urlparse(req.url).hostname or "").lower().endswith("truyenfull.live") and u.path.rstrip("/")=="/toi-lam-bac-si-gia-dinh-trong-tieu-thuyet-tong-giam-doc-ba-dao":
+                root=u.path.rstrip("/")
+                numbers=set()
+                for item in found.values():
+                    m=re.search(r"/chuong-(\d+)(?:[-/]|$)",urlparse(item["url"]).path,re.I)
+                    if m:numbers.add(int(m.group(1)))
+                async def recover(n):
+                    target=urlunparse((u.scheme,u.netloc,root+"/chuong-"+str(n)+"/","","",""))
+                    try:
+                        page,actual=await get_page(client,target)
+                        if not re.fullmatch(re.escape(root)+r"/chuong-"+str(n)+r"/?",urlparse(actual).path,re.I):return None
+                        heading=page.select_one("h2,h1,.chapter-title,.chapter-name")
+                        label=heading.get_text(" ",strip=True) if heading else ""
+                        if not re.search(r"(?:Chương|Chuong|Chapter)\s*"+str(n)+r"\b",label,re.I):return None
+                        return {"url":actual,"title":label[:180]}
+                    except (HTTPException,httpx.HTTPError):return None
+                for item in await asyncio.gather(*(recover(n) for n in range(1,97) if n not in numbers)):
+                    if item:found[item["url"]]=item
             chapters=list(found.values())
             def order(x):
                 label=x["title"].strip()
@@ -1210,6 +1228,8 @@ async def discover(req:ReadRequest):
                     chapters.sort(key=order)
             if urlparse(req.url).path.rstrip("/")=="/vinh-quang-gianh-lay-nam-chinh" and (urlparse(req.url).hostname or "").lower().endswith("truyenfull.live"):
                 title="Vinh Quang Giành Lấy Nam Chính"
+            if u.path.rstrip("/")=="/toi-lam-bac-si-gia-dinh-trong-tieu-thuyet-tong-giam-doc-ba-dao" and (u.hostname or "").lower().endswith("truyenfull.live"):
+                title="Tôi Làm Bác Sĩ Gia Đình Trong Tiểu Thuyết Tổng Giám Đốc Bá Đạo"
             return {"title":title[:200],"author":author.get_text(" ",strip=True)[:120] if author else "","description":description[:15000],"cover":cover,"categories":categories[:30],"chapters":chapters[:3000] if (urlparse(base).hostname or "").lower().endswith("truyenfull.live") else chapters[:1000],"count":len(chapters),"truncated":len(chapters)>(3000 if (urlparse(base).hostname or "").lower().endswith("truyenfull.live") else 1000)}
     except httpx.HTTPStatusError as exc:
         status=exc.response.status_code

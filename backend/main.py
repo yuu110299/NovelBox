@@ -1790,6 +1790,32 @@ async def inkitt_info(client, story_url):
     }
 
 
+
+async def atlantis_rendered_html(url):
+    """Render public Atlantis pages, including React-generated story panels."""
+    target=normalized_url(url,url)
+    if not target or not (urlparse(target).hostname or "").endswith("atlantisviendong.com"):
+        raise HTTPException(400,"URL Atlantis không hợp lệ.")
+    try:
+        async with await _render_browser() as playwright:
+            browser=await playwright.chromium.launch(headless=True,args=["--no-sandbox","--disable-dev-shm-usage"])
+            try:
+                page=await browser.new_page(locale="vi-VN")
+                await page.goto(target.split("#",1)[0],wait_until="domcontentloaded",timeout=35000)
+                try:
+                    await page.locator(".review-prose, a[href*='/chuong/c']").first.wait_for(timeout=12000)
+                except Exception:
+                    pass
+                await page.wait_for_timeout(1000)
+                html=await page.content()
+                return BeautifulSoup(html,"html.parser"),page.url
+            finally:
+                await browser.close()
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(502,"Không thể đọc trang Atlantis bằng trình duyệt: "+str(exc)[:180])
+
 @app.post("/discover")
 async def discover(req:ReadRequest):
     source=check_selected_source(req.url,req.source)
@@ -1826,8 +1852,7 @@ async def discover(req:ReadRequest):
     if (u.hostname or "").lower().endswith("atlantisviendong.com"):
         # Atlantis is a React application. Do not use generic site metadata or
         # invent a chapter list if its public HTML does not contain one.
-        async with httpx.AsyncClient(timeout=25,follow_redirects=False,headers={"User-Agent":"Mozilla/5.0","Accept":"text/html","Accept-Language":"vi-VN,vi;q=0.9"}) as client:
-            soup,base=await get_page(client,req.url.split("#",1)[0])
+        soup,base=await atlantis_rendered_html(req.url)
         story_path=urlparse(base).path.rstrip("/")
         if not story_path.startswith("/truyen/"):
             raise HTTPException(400,"Hãy nhập URL trang thông tin truyện Atlantis.")
@@ -1841,7 +1866,7 @@ async def discover(req:ReadRequest):
                     value=paragraph.get_text(" ",strip=True)
                     value=re.sub(r"^"+re.escape(key)+r"\s*[:：]\s*","",value).strip()
                     fields[key]=value
-        cover_node=soup.select_one('img[src^="/api/media/"]')
+        cover_node=soup.select_one('section img[src^="/api/media/"], img[alt*="Bác Sĩ Gia Đình"][src^="/api/media/"]')
         cover=urljoin(base,cover_node.get("src")) if cover_node else ""
         chapter_items=[]
         seen=set()

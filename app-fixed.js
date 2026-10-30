@@ -111,30 +111,34 @@ async function loadStory(){
   displayedCoverBytes=null;
   coverDataUrl=null;
   if(storyMeta.cover){
-   const img=document.createElement("img"),coverUrl=storyMeta.cover;
-   img.alt="Ảnh bìa truyện";img.className="story-meta-cover";img.referrerPolicy="no-referrer";img.loading="eager";
-   img.onload=()=>{void rememberDisplayedCover(img,coverUrl)};
-   img.onerror=async()=>{
-    img.onerror=null;
+   const coverUrl=storyMeta.cover;
+   const img=document.createElement("img");
+   img.alt="Ảnh bìa truyện";img.className="story-meta-cover";
+   img.referrerPolicy="no-referrer";img.loading="eager";
+   // The preview must use the exact decoded bytes used by the successful export,
+   // not a separate cross-origin <img> request which may be rejected by the CDN.
+   img.style.visibility="hidden";
+   layout.append(img);
+   void (async()=>{
     try{
-     // Cover export already handles Googleusercontent size variants and public image relays.
      const cover=await coverBytes();
-     if(!cover?.bytes?.length)throw Error("Không tải được ảnh bìa");
-     if(!img.isConnected||!document.getElementById("storymeta")?.contains(img))return;
+     if(!cover?.bytes?.length)throw Error("Không lấy được dữ liệu ảnh");
+     if(!img.isConnected||!meta.contains(layout))return;
      displayedCoverBytes=cover;
-     imageCache.set(coverUrl,cover);
      const blob=new Blob([cover.bytes],{type:cover.mime||"image/jpeg"});
-     const local=URL.createObjectURL(blob);
-     img.onload=()=>URL.revokeObjectURL(local);
-     img.onerror=()=>{URL.revokeObjectURL(local);img.removeAttribute("src");img.alt="Không thể hiển thị ảnh bìa"};
-     img.src=local;
-    }catch(e){
-     img.removeAttribute("src");
-     img.alt="Không thể hiển thị ảnh bìa";
-     img.title=e.message||"Ảnh bìa không khả dụng";
+     const objectUrl=URL.createObjectURL(blob);
+     img.onload=()=>{img.style.visibility="visible";URL.revokeObjectURL(objectUrl)};
+     img.onerror=()=>{URL.revokeObjectURL(objectUrl);img.removeAttribute("src");img.style.visibility="hidden"};
+     img.src=objectUrl;
+    }catch(error){
+     console.warn("Không thể tạo ảnh xem trước từ dữ liệu xuất file",error);
+     if(!img.isConnected||!meta.contains(layout))return;
+     // Direct URL remains a visual-only fallback; never affect Word/EPUB export.
+     img.onload=()=>{img.style.visibility="visible"};
+     img.onerror=()=>{img.removeAttribute("src");img.style.visibility="hidden";img.title="Không thể hiển thị ảnh bìa"};
+     img.src=coverUrl;
     }
-   };
-   img.src=coverUrl;layout.append(img);
+   })();
   }
   for(const [name,val] of [["Tên truyện",storyMeta.title],["Tác giả",storyMeta.author],["Thể loại",storyMeta.categories.join(", ")],["Mô tả",storyMeta.description]]){if(val){const p=document.createElement("p");const b=document.createElement("strong");b.textContent=name+": ";p.append(b,document.createTextNode(val));if(name==="Mô tả"&&val.length>450){p.style.maxHeight="9em";p.style.overflow="hidden";const toggle=document.createElement("button");toggle.type="button";toggle.className="alt";toggle.textContent="Xem thêm";toggle.style.marginBottom="12px";toggle.onclick=()=>{const expanded=p.style.maxHeight==="none";p.style.maxHeight=expanded?"9em":"none";toggle.textContent=expanded?"Xem thêm":"Thu gọn";toggle.setAttribute("aria-expanded",String(!expanded))};toggle.setAttribute("aria-expanded","false");details.append(p,toggle)}else details.append(p)}}
   layout.append(details);meta.append(layout);

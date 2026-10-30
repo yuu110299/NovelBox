@@ -1196,7 +1196,18 @@ async def discover(req:ReadRequest):
                 return (1 if is_extra else 0,number)
             if not (wattpad_data and wattpad_data['parts']):
                 # NavyTeams lists newest first; stable sorting restores chapter 1 -> N -> extras.
-                chapters.sort(key=order)
+                if (urlparse(req.url).hostname or "").lower().endswith("truyenfull.live"):
+                    # Truyenfull's chapter number is the reading order, including
+                    # numbered extras interleaved with main chapters. Do not move
+                    # every title containing "Ngoại truyện" to the end.
+                    def truyenfull_order(ch):
+                        path=urlparse(ch["url"]).path
+                        m=re.search(r"/(?:chuong|chapter)[-_]?(\d+)(?:[-/]|$)",path,re.I)
+                        if not m:m=re.match(r"\s*(?:Chương|Chuong|Chapter|Chap)\s*(\d+)\b",ch["title"],re.I)
+                        return int(m.group(1)) if m else 10**9
+                    chapters.sort(key=truyenfull_order)
+                else:
+                    chapters.sort(key=order)
             if urlparse(req.url).path.rstrip("/")=="/vinh-quang-gianh-lay-nam-chinh" and (urlparse(req.url).hostname or "").lower().endswith("truyenfull.live"):
                 title="Vinh Quang Giành Lấy Nam Chính"
             return {"title":title[:200],"author":author.get_text(" ",strip=True)[:120] if author else "","description":description[:15000],"cover":cover,"categories":categories[:30],"chapters":chapters[:3000] if (urlparse(base).hostname or "").lower().endswith("truyenfull.live") else chapters[:1000],"count":len(chapters),"truncated":len(chapters)>(3000 if (urlparse(base).hostname or "").lower().endswith("truyenfull.live") else 1000)}

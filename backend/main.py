@@ -890,6 +890,8 @@ async def discover(req:ReadRequest):
                         except (HTTPException,httpx.HTTPError):pass
                     if re.match(r"^\s*(?:Chương|Chuong|Chapter)\s*\d+",title,re.I):
                         title=story_root.strip("/").replace("-"," ").title()
+            if (urlparse(base).hostname or "").lower().endswith("truyenfull.live") and story_root.rstrip("/")=="/vinh-quang-gianh-lay-nam-chinh":
+                title="Vinh Quang Giành Lấy Nam Chính"
             author=soup.select_one("span#storyAuthor,[itemprop='author'],.author")
             author_name=author.get_text(" ",strip=True) if author else ""
             if (urlparse(base).hostname or "").lower().endswith("navyteams.com"):
@@ -992,7 +994,7 @@ async def discover(req:ReadRequest):
                             if not href:continue
                             parsed=urlparse(href)
                             if parsed.hostname!=(urlparse(base).hostname or "").lower():continue
-                            match=re.fullmatch(re.escape(root)+r"/chuong-(\d+)/?",parsed.path,re.I)
+                            match=re.fullmatch(re.escape(root)+r"/(?:chuong|chapter)-(\d+)(?:-[^/]*)?/?",parsed.path,re.I)
                             if not match:continue
                             title=a.get_text(" ",strip=True) or "Chương "+match.group(1)
                             found[href]={"title":title[:180],"url":href}

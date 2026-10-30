@@ -107,7 +107,11 @@ async function loadStory(){
    if(path==='/oan-cot-phong-trien-tuyet-the-nhat-can-thong-a'){
     data.title='Oán Cốt Phong Triền - Tuyệt Thế Nhất Căn Thông A';
    }else if(/^(?:\*\*)?\s*(?:Tên truyện\s*:\s*)?(?:Chương|Chuong|Chapter|Chap|Ngoại truyện)\s*\d+\b/i.test(String(data.title||''))){
-    throw Error('API trả tên chương thay vì tên truyện; đã chặn tên sách sai.');
+    // Keep the chapter list usable even when a stale API responds with a chapter title.
+    // The canonical story slug is safer than displaying a chapter as the book name.
+    const slug=path.split('/').filter(Boolean)[0]||'';
+    if(!slug||/^(?:chuong|chapter|chap)-?\\d+/i.test(slug))throw Error('Không xác định được tên truyện từ URL; vui lòng nhập liên kết trang truyện.');
+    data.title=decodeURIComponent(slug).replace(/[-_]+/g,' ').replace(/\\b\\p{L}/gu,c=>c.toLocaleUpperCase('vi-VN'));
    }
   }
   storyMeta={title:data.title||"",author:data.author||"",description:data.description||"",categories:data.categories||[],cover:data.cover||"",story_url:data.story_url||""};

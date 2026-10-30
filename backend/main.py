@@ -1873,7 +1873,7 @@ async def discover(req:ReadRequest):
                     fields[key]=value
         # Prefer the actual story cover (portrait image in the story header).
         # Avoid selecting an unrelated media thumbnail from another section.
-        cover_node=soup.select_one('img[alt][src^="/api/media/"][class*="aspect-"], img[alt][src^="/api/media/"][class*="object-cover"]')
+        cover_node=soup.select_one('section img[alt][src^="/api/media/"][class*="aspect-"][class*="object-cover"]')
         if not cover_node:
             cover_node=soup.select_one('section img[alt][src^="/api/media/"]')
         cover=urljoin(base,cover_node.get("src")) if cover_node else ""
@@ -1886,7 +1886,9 @@ async def discover(req:ReadRequest):
                 continue
             if link in seen:continue
             seen.add(link)
-            chapter_items.append({"title":a.get_text(" ",strip=True) or "Chương "+str(len(chapter_items)+1),"url":link})
+            chapter_title_node=a.select_one("span.block.font-montserrat.font-semibold, span[class*=uppercase][class*=truncate]")
+            chapter_title=chapter_title_node.get_text(" ",strip=True) if chapter_title_node else a.get_text(" ",strip=True)
+            chapter_items.append({"title":chapter_title or "Chương "+str(len(chapter_items)+1),"url":link})
         chapter_items.sort(key=lambda x:int(re.search(r"/chuong/c(\d+)",x["url"]).group(1)))
         if not chapter_items:
             raise HTTPException(422,"Atlantis: trình duyệt chưa lấy được liên kết /chuong/cN. HTML có "+str(len(soup.select("a[href]")))+" liên kết, "+str(len(soup.select(".review-prose")))+" khối thông tin. Có thể mục lục chưa tải hoặc website hạn chế Render.")

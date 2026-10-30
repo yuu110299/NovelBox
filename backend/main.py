@@ -962,7 +962,7 @@ async def discover(req:ReadRequest):
                 # and accept its numbered /chuong-N/ links, including "Ngoại truyện".
                 root=story_path.rstrip("/")
                 last_page=max((int(m.group(1)) for page in pages
-                               if (m:=re.fullmatch(re.escape(root)+r"/trang-(\\d+)/?",urlparse(page).path,re.I))),default=1)
+                               if (m:=re.fullmatch(re.escape(root)+r"/trang-(\d+)/?",urlparse(page).path,re.I))),default=1)
                 for attempt in range(3):
                     try:
                         tail,_=await get_page(client,urlunparse((u.scheme,u.netloc,root+"/trang-"+str(last_page)+"/","","","")))
@@ -971,7 +971,7 @@ async def discover(req:ReadRequest):
                             if not href:continue
                             parsed=urlparse(href)
                             if parsed.hostname!=(urlparse(base).hostname or "").lower():continue
-                            match=re.fullmatch(re.escape(root)+r"/chuong-(\\d+)/?",parsed.path,re.I)
+                            match=re.fullmatch(re.escape(root)+r"/chuong-(\d+)/?",parsed.path,re.I)
                             if not match:continue
                             title=a.get_text(" ",strip=True) or "Chương "+match.group(1)
                             found[href]={"title":title[:180],"url":href}

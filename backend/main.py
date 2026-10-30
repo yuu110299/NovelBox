@@ -1156,6 +1156,8 @@ async def discover(req:ReadRequest):
             if not (wattpad_data and wattpad_data['parts']):
                 # NavyTeams lists newest first; stable sorting restores chapter 1 -> N -> extras.
                 chapters.sort(key=order)
+            if urlparse(req.url).path.rstrip("/")=="/vinh-quang-gianh-lay-nam-chinh" and (urlparse(req.url).hostname or "").lower().endswith("truyenfull.live"):
+                title="Vinh Quang Giành Lấy Nam Chính"
             return {"title":title[:200],"author":author.get_text(" ",strip=True)[:120] if author else "","description":description[:15000],"cover":cover,"categories":categories[:30],"chapters":chapters[:3000] if (urlparse(base).hostname or "").lower().endswith("truyenfull.live") else chapters[:1000],"count":len(chapters),"truncated":len(chapters)>(3000 if (urlparse(base).hostname or "").lower().endswith("truyenfull.live") else 1000)}
     except httpx.HTTPStatusError as exc:
         status=exc.response.status_code

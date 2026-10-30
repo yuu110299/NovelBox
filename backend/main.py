@@ -1166,7 +1166,22 @@ async def discover(req:ReadRequest):
                 if synopsis:
                     for junk in synopsis.select(".rate,.rate-holder,.rate-text,script,style"):
                         junk.decompose()
-                    clean_synopsis=synopsis.get_text("\n",strip=True)
+                    # Preserve source line breaks and paragraph boundaries without
+                    # adding a newline between every inline span or bold element.
+                    from bs4 import BeautifulSoup as _SynopsisSoup
+                    synopsis_copy=_SynopsisSoup(str(synopsis),"html.parser")
+                    for br in synopsis_copy.select("br"):
+                        br.replace_with("\n")
+                    for block in reversed(list(synopsis_copy.select("p,div,li,blockquote,h1,h2,h3,h4"))):
+                        if block is synopsis_copy.select_one(".desc-text"):
+                            continue
+                        block.insert_before("\n\n")
+                        block.insert_after("\n\n")
+                    clean_synopsis=synopsis_copy.get_text("",strip=False)
+                    clean_synopsis=clean_synopsis.replace("\r","")
+                    clean_synopsis=re.sub(r"[ \\t]+"," ",clean_synopsis)
+                    clean_synopsis=re.sub(r" *\n *","\n",clean_synopsis)
+                    clean_synopsis=re.sub(r"\n{3,}","\n\n",clean_synopsis).strip()
                     if clean_synopsis:
                         description=clean_synopsis
                 # The og:image URL can be a broken =w0-h0-c variant. Use the

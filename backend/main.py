@@ -877,7 +877,7 @@ async def discover(req:ReadRequest):
                 if (urlparse(base).hostname or "").lower().endswith("truyenfull.live"):
                     # The story heading is within the information panel; chapter
                     # headings and og:title may instead describe the last chapter.
-                    story_heading=soup.select_one(".book-info h3, .book-info h2, .info h3, .story-info h3, .book-info h1, .info h1, .story-info h1")
+                    story_heading=soup.select_one('h3.title[itemprop="name"], .book-info h3, .book-info h2, .info h3, .story-info h3, .book-info h1, .info h1, .story-info h1')
                     if story_heading:
                         heading=story_heading.get_text(" ",strip=True)
                         if heading and not re.match(r"^(?:Chương|Chuong|Chapter|Chap)\\s*\\d+",heading,re.I):

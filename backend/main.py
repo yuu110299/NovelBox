@@ -1908,11 +1908,16 @@ async def atlantis_rendered_html(url):
                     await page.locator("#muc-luc").scroll_into_view_if_needed(timeout=12000)
                 except Exception:
                     pass
-                try:
-                    await page.locator('#muc-luc a[href*="/chuong/c"]').first.wait_for(state="attached",timeout=25000)
-                except Exception:
-                    pass
-                await page.wait_for_timeout(1200)
+                # Atlantis loads the table of contents after React hydration.
+                # The supplied saved HTML contains a[data-discover=true] links,
+                # with chapter number and subtitle in separate spans.
+                for attempt in range(12):
+                    count=await page.locator('a[href*="/chuong/c"]').count()
+                    if count:
+                        break
+                    await page.mouse.wheel(0,1100)
+                    await page.wait_for_timeout(1500)
+                await page.wait_for_timeout(1000)
                 html=await page.content()
                 return BeautifulSoup(html,"html.parser"),page.url
             finally:

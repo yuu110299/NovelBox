@@ -970,8 +970,8 @@ async def discover(req:ReadRequest):
                 if not heading:
                     raise HTTPException(422,"TruyenFull: không tìm thấy tiêu đề truyện trong h3.title[itemprop=name].")
                 actual_title=html.unescape(heading.get_text(" ",strip=True)).replace("\u00a0"," ").strip()
-                actual_title=re.sub(r"^(?:Tên truyện|Title)\\s*[:：]\\s*","",actual_title,flags=re.I).strip()
-                if not actual_title or re.match(r"^(?:Chương|Chuong|Chapter|Chap|Ngoại truyện)\\s*[0-9]+\\b",actual_title,re.I):
+                actual_title=re.sub(r"^(?:Tên truyện|Title)\s*[:：]\s*","",actual_title,flags=re.I).strip()
+                if not actual_title or re.match(r"^(?:Chương|Chuong|Chapter|Chap|Ngoại truyện)\s*[0-9]+\b",actual_title,re.I):
                     raise HTTPException(422,"TruyenFull: tiêu đề không hợp lệ hoặc là tên chương.")
                 title=actual_title
                 # Use the same verified story page for all metadata. The original
@@ -1166,7 +1166,7 @@ async def discover(req:ReadRequest):
                 if synopsis:
                     for junk in synopsis.select(".rate,.rate-holder,.rate-text,script,style"):
                         junk.decompose()
-                    clean_synopsis=synopsis.get_text("\\n",strip=True)
+                    clean_synopsis=synopsis.get_text("\n",strip=True)
                     if clean_synopsis:
                         description=clean_synopsis
                 # The og:image URL can be a broken =w0-h0-c variant. Use the

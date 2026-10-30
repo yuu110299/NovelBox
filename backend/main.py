@@ -869,6 +869,27 @@ async def discover(req:ReadRequest):
                     raise HTTPException(422,"NavyTeams không có tên truyện hợp lệ trong meta keywords.")
             else:
                 title=(soup.select_one("meta[property='og:title']") or {}).get("content","") or (soup.h1.get_text(" ",strip=True) if soup.h1 else "")
+                if (urlparse(base).hostname or "").lower().endswith("truyenfull.live"):
+                    # Never use the last chapter heading as the novel title.
+                    # Prefer the story info heading, then the story root's metadata.
+                    story_root=re.sub(r"/trang-\d+/?$","/",urlparse(base).path,flags=re.I)
+                    story_root=re.sub(r"/chuong-\d+/?$","/",story_root,flags=re.I)
+                    title_node=soup.select_one(".book-info h1,.info h1,.story-info h1,h1[itemprop='name'],.book-title,.story-title")
+                    candidate=title_node.get_text(" ",strip=True) if title_node else ""
+                    if candidate and not re.match(r"^\s*(?:Chương|Chuong|Chapter)\s*\d+",candidate,re.I):
+                        title=candidate
+                    if re.match(r"^\s*(?:Chương|Chuong|Chapter)\s*\d+",title,re.I):
+                        try:
+                            root_url=urlunparse((u.scheme,u.netloc,story_root,"","",""))
+                            root_soup,_=await get_page(client,root_url)
+                            root_node=root_soup.select_one(".book-info h1,.info h1,.story-info h1,h1[itemprop='name'],.book-title,.story-title")
+                            root_title=root_node.get_text(" ",strip=True) if root_node else ""
+                            if not root_title or re.match(r"^\s*(?:Chương|Chuong|Chapter)\s*\d+",root_title,re.I):
+                                root_title=(root_soup.select_one("meta[property='og:title']") or {}).get("content","")
+                            if root_title and not re.match(r"^\s*(?:Chương|Chuong|Chapter)\s*\d+",root_title,re.I):title=root_title
+                        except (HTTPException,httpx.HTTPError):pass
+                    if re.match(r"^\s*(?:Chương|Chuong|Chapter)\s*\d+",title,re.I):
+                        title=story_root.strip("/").replace("-"," ").title()
             author=soup.select_one("span#storyAuthor,[itemprop='author'],.author")
             author_name=author.get_text(" ",strip=True) if author else ""
             if (urlparse(base).hostname or "").lower().endswith("navyteams.com"):

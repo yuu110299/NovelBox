@@ -510,13 +510,17 @@ def page_links(soup,base,story_path):
     return result[:50]
 
 def truyenfull_clean_text(value):
-    """Decode source-escaped paragraph separators without affecting other sources."""
+    """Preserve paragraph boundaries encoded as escaped newlines or HTML breaks."""
     value=str(value or "")
-    for _ in range(5):
-        updated=(value.replace("\\\r\\\n","\n").replace("\\\n","\n")
-                     .replace("\\\r","\n").replace("\r\n","\n")
-                     .replace("\n","\n").replace("\r","\n"))
-        if updated==value:break
+    # Some TruyenFull chapters encode line breaks as literal \n, \r\n
+    # or escaped <br> strings rather than real DOM <br> elements.
+    value=re.sub(r"(?i)(?:&lt;|\\u003c|\\x3c)\s*br\s*/?\s*(?:&gt;|\\u003e|\\x3e)", "\n", value)
+    value=re.sub(r"(?i)<br\s*/?>", "\n", value)
+    for _ in range(3):
+        updated=re.sub(r"(?:\\r\\n|\\n|\\r)", "\n", value)
+        updated=updated.replace("\\\n", "\n")
+        if updated==value:
+            break
         value=updated
     value=value.replace("\xa0"," ").replace("\r\n","\n").replace("\r","\n")
     value=re.sub(r"[ \t]*\n[ \t]*","\n",value)

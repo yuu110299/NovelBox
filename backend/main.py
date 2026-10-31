@@ -1960,8 +1960,10 @@ async def discover(req:ReadRequest):
             soup,base=await asyncio.wait_for(atlantis_rendered_html(req.url),timeout=70)
         if not soup.select('a[href*="/chuong/c"]'):
             soup,base=await asyncio.wait_for(atlantis_rendered_html(req.url),timeout=70)
-        story_path=urlparse(base).path.rstrip("/")
-        if not story_path.startswith("/truyen/"):
+        # Use the submitted story URL, not the browser final URL (SPA redirects may change it).
+        story_path=urlparse(req.url).path.rstrip("/")
+        story_path=re.sub(r"/chuong/c\\d+$", "", story_path, flags=re.I)
+        if not re.fullmatch(r"/truyen/[^/]+", story_path):
             raise HTTPException(400,"Hãy nhập URL trang thông tin truyện Atlantis.")
         info=soup.select_one("div.review-prose.break-words, div.review-prose")
         fields={}

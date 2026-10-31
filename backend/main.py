@@ -1582,7 +1582,7 @@ async def _render_browser():
             # Install headless Chromium once into the service's writable cache.
             result = await asyncio.to_thread(
                 subprocess.run, [sys.executable, "-m", "playwright", "install", "chromium"],
-                capture_output=True, text=True, timeout=45
+                capture_output=True, text=True, timeout=30
             )
             if result.returncode:
                 raise HTTPException(503, "Không thể cài Chromium trên Render: " + result.stderr[-350:])
@@ -1897,11 +1897,11 @@ async def atlantis_rendered_html(url):
     if not target or not (urlparse(target).hostname or "").endswith("atlantisviendong.com"):
         raise HTTPException(400,"URL Atlantis không hợp lệ.")
     try:
-        async with await asyncio.wait_for(_render_browser(), timeout=55) as playwright:
+        async with await asyncio.wait_for(_render_browser(), timeout=35) as playwright:
             browser=await playwright.chromium.launch(headless=True,args=["--no-sandbox","--disable-dev-shm-usage"])
             try:
                 page=await browser.new_page(locale="vi-VN")
-                await page.goto(target.split("#",1)[0],wait_until="domcontentloaded",timeout=18000)
+                await page.goto(target.split("#",1)[0],wait_until="domcontentloaded",timeout=16000)
                 # Atlantis renders its TOC under section#muc-luc (not a tab).
                 # Scroll to it and wait for actual chapter links, not review metadata.
                 try:
@@ -1964,13 +1964,15 @@ async def discover(req:ReadRequest):
         # Atlantis is a React application. Do not use generic site metadata or
         # invent a chapter list if its public HTML does not contain one.
         # Prefer public HTML: Playwright Chromium may not be installed on Render.
-        async with httpx.AsyncClient(timeout=30,follow_redirects=True,headers={"User-Agent":"Mozilla/5.0","Accept":"text/html"}) as at_client:
-            try:
-                soup,base=await get_page(at_client,req.url)
-            except Exception:
-                soup,base=await atlantis_rendered_html(req.url)
+        # Do not stack a 30s HTTP request with a browser installation and
+        # multiple waits: frontend aborts /discover after 120 seconds.
+        try:
+            async with httpx.AsyncClient(timeout=httpx.Timeout(12.0),follow_redirects=True,headers={"User-Agent":"Mozilla/5.0","Accept":"text/html"}) as at_client:
+                soup,base=await asyncio.wait_for(get_page(at_client,req.url),timeout=15)
+        except Exception:
+            soup,base=await asyncio.wait_for(atlantis_rendered_html(req.url),timeout=70)
         if not soup.select('a[href*="/chuong/c"]'):
-            soup,base=await atlantis_rendered_html(req.url)
+            soup,base=await asyncio.wait_for(atlantis_rendered_html(req.url),timeout=70)
         story_path=urlparse(base).path.rstrip("/")
         if not story_path.startswith("/truyen/"):
             raise HTTPException(400,"Hãy nhập URL trang thông tin truyện Atlantis.")

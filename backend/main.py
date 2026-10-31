@@ -657,18 +657,6 @@ def chapter_body(soup, source_url=''):
             return "\n\n"+content+"\n\n" if content else ""
         return "".join(walk(child) for child in node.children)
     content="".join(walk(child) for child in chapter.children)
-    if host.endswith("truyenfull.live"):
-        # Preserve each HTML paragraph as its own Word paragraph.
-        paragraph_nodes=chapter.find_all("p")
-        if paragraph_nodes:
-            paragraphs=[]
-            for p in paragraph_nodes:
-                paragraph="".join(walk(child) for child in p.children).strip()
-                if paragraph:
-                    paragraphs.append(paragraph)
-            has_bare_text=any(isinstance(child,NavigableString) and child.strip().strip("\\").strip() for child in chapter.children)
-            if paragraphs and not has_bare_text:
-                content="\n\n".join(paragraphs)
     content=content.replace("\r\n","\n").replace("\n","\n").replace("\r","\n")
     content=content.replace("\xa0"," ").replace("\r","")
     if host.endswith("truyenfull.live"):

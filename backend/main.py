@@ -1995,7 +1995,12 @@ async def discover(req:ReadRequest):
         cover=urljoin(base,cover_node.get("src")) if cover_node else ""
         chapter_items=[]
         seen=set()
-        for a in soup.select('a[href], [data-href]'):
+        # Saved Atlantis chapter pages expose their full TOC as
+        # a[data-discover] > span.font-medium.truncate. Prefer these
+        # over duplicate chapter links in navigation/sidebar.
+        toc_links=soup.select('a[href*="/chuong/c"] > span.font-medium.truncate')
+        anchors=[span.parent for span in toc_links] if toc_links else soup.select('a[href], [data-href]')
+        for a in anchors:
             link=urljoin(base,a.get("href") or a.get("data-href") or "")
             parsed=urlparse(link)
             if parsed.hostname!=(urlparse(base).hostname) or not re.fullmatch(re.escape(story_path)+r"/chuong/c\d+/?",parsed.path,flags=re.I):
@@ -2006,7 +2011,7 @@ async def discover(req:ReadRequest):
             # Ignore word counts, view totals and comment totals.
             title_span=a.select_one("span.block.font-montserrat.font-semibold, span[class*=uppercase][class*=truncate]")
             subtitle_span=a.select_one("span.block.font-montserrat.font-medium, span[class*=font-medium][class*=truncate]")
-            chapter_title=title_span.get_text(" ",strip=True) if title_span else ""
+            chapter_title=title_span.get_text(" ",strip=True) if title_span else a.get_text(" ",strip=True)
             subtitle=subtitle_span.get_text(" ",strip=True) if subtitle_span else ""
             subtitle=re.sub(r"\s*[-–—]?\s*[\d.,]+\s*chữ\s*$","",subtitle,flags=re.I).strip(" -–—")
             if subtitle and subtitle.casefold()!=chapter_title.casefold():

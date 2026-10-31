@@ -1582,7 +1582,7 @@ async def _render_browser():
             # Install headless Chromium once into the service's writable cache.
             result = await asyncio.to_thread(
                 subprocess.run, [sys.executable, "-m", "playwright", "install", "chromium"],
-                capture_output=True, text=True, timeout=180
+                capture_output=True, text=True, timeout=45
             )
             if result.returncode:
                 raise HTTPException(503, "Không thể cài Chromium trên Render: " + result.stderr[-350:])
@@ -1897,11 +1897,11 @@ async def atlantis_rendered_html(url):
     if not target or not (urlparse(target).hostname or "").endswith("atlantisviendong.com"):
         raise HTTPException(400,"URL Atlantis không hợp lệ.")
     try:
-        async with await _render_browser() as playwright:
+        async with await asyncio.wait_for(_render_browser(), timeout=55) as playwright:
             browser=await playwright.chromium.launch(headless=True,args=["--no-sandbox","--disable-dev-shm-usage"])
             try:
                 page=await browser.new_page(locale="vi-VN")
-                await page.goto(target.split("#",1)[0],wait_until="domcontentloaded",timeout=35000)
+                await page.goto(target.split("#",1)[0],wait_until="domcontentloaded",timeout=18000)
                 # Atlantis renders its TOC under section#muc-luc (not a tab).
                 # Scroll to it and wait for actual chapter links, not review metadata.
                 try:
@@ -1911,12 +1911,12 @@ async def atlantis_rendered_html(url):
                 # Atlantis loads the table of contents after React hydration.
                 # The supplied saved HTML contains a[data-discover=true] links,
                 # with chapter number and subtitle in separate spans.
-                for attempt in range(12):
+                for attempt in range(6):
                     count=await page.locator('a[href*="/chuong/c"]').count()
                     if count:
                         break
                     await page.mouse.wheel(0,1100)
-                    await page.wait_for_timeout(1500)
+                    await page.wait_for_timeout(900)
                 await page.wait_for_timeout(1000)
                 html=await page.content()
                 return BeautifulSoup(html,"html.parser"),page.url

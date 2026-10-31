@@ -1925,7 +1925,7 @@ async def atlantis_rendered_html(url):
     except HTTPException:
         raise
     except Exception as exc:
-        raise HTTPException(502,"Không thể đọc trang Atlantis bằng trình duyệt: "+str(exc)[:180])
+        raise HTTPException(502,"Atlantis: trình duyệt không khả dụng ("+type(exc).__name__+"): "+repr(exc)[:350])
 
 @app.post("/discover")
 async def discover(req:ReadRequest):

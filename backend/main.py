@@ -1573,20 +1573,7 @@ _render_browser_lock = asyncio.Lock()
 _render_browser_ready = False
 
 async def _render_browser():
-    global _render_browser_ready
     from playwright.async_api import async_playwright
-    async with _render_browser_lock:
-        if not _render_browser_ready:
-            import subprocess, sys
-            # Render's existing build command installs Python packages only.
-            # Install headless Chromium once into the service's writable cache.
-            result = await asyncio.to_thread(
-                subprocess.run, [sys.executable, "-m", "playwright", "install", "chromium"],
-                capture_output=True, text=True, timeout=30
-            )
-            if result.returncode:
-                raise HTTPException(503, "Không thể cài Chromium trên Render: " + result.stderr[-350:])
-            _render_browser_ready = True
     return async_playwright()
 
 async def _render_page(url):

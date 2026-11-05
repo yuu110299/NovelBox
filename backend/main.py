@@ -697,6 +697,10 @@ def chapter_body(soup, source_url=''):
     content=re.sub(r" *\n *","\n",content)
     content=re.sub(r"\n{3,}","\n\n",content).strip()
     if host.endswith("wordpress.com"):
+        # Remove isolated numeric chapter navigation labels, never full chapter titles.
+        content=re.sub(r"(?im)^\\s*(?:Chương|Chuong|Chapter)\\s+\\d{1,4}\\s*$", "", content)
+        content=re.sub(r"\\n{3,}", "\\n\\n", content).strip()
+    if host.endswith("wordpress.com"):
         # WordPress novel chapters often end with bare previous/next chapter links.
         # Strip only consecutive standalone chapter labels at the very end.
         content=re.sub(r"(?:\\n\\s*(?:Chương|Chuong|Chapter)\\s+\\d{1,4}\\s*){1,4}$","",content,flags=re.I).rstrip()

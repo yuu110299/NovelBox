@@ -186,7 +186,7 @@ async def resolve_wp_shortlinks(client,soup,base):
     for a in article.select("a[href]"):
         u=urlparse(urljoin(base,a.get("href","")))
         label=a.get_text(" ",strip=True)
-        if u.hostname=="wp.me" and u.scheme in ("http","https") and re.fullmatch(r"\\d{1,4}",label):
+        if u.hostname=="wp.me" and u.scheme in ("http","https") and re.fullmatch(r"\d{1,4}",label):
             items.append((label,"https://wp.me"+u.path))
     async def resolve(item):
         label,short=item

@@ -1431,6 +1431,20 @@ async def image(req:ReadRequest):
     if not await public_image_host(u.hostname):raise HTTPException(400,"Máy chủ ảnh không an toàn hoặc không truy cập được.")
     headers={"User-Agent":"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/131.0.0.0 Safari/537.36","Referer":f"https://{u.hostname}/","Accept":"image/png,image/jpeg,image/webp,*/*"}
     candidates=[url]
+    if u.hostname=="img.wattpad.com" and re.match(r"^/cover/\\d+-\\d+(?:-k\\d+)?\\.(?:jpg|jpeg|png|webp)$",u.path,re.I):
+        # Wattpad's thumbnail cache can return 502 even when another size works.
+        # Keep the story id and cache revision; do not substitute another cover.
+        from urllib.parse import quote
+        headers["Referer"]="https://www.wattpad.com/"
+        variants=[url]
+        for size in (512,384,256,128):
+            variant=re.sub(r"(?<=/cover/)(\\d+)-\\d+",lambda m:m.group(1)+"-"+str(size),url,count=1)
+            variants.append(variant)
+        candidates=list(dict.fromkeys(variants+[
+            "https://wsrv.nl/?url="+quote(v,safe="") for v in variants
+        ]+[
+            "https://images.weserv.nl/?url="+quote(v,safe="") for v in variants
+        ]))
     if u.hostname=="static.truyenfull.live" and u.path.startswith("/cover/"):
         # The CDN may require the source site's Referer, and may redirect to
         # another image host. Try the original URL first, then image relays.

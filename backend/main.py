@@ -179,6 +179,38 @@ async def dualeo_diagnostics(req: ReadRequest):
                 report["pages"].append(await inspect(page))
     return report
 
+async def resolve_wp_shortlinks(client,soup,base):
+    article=soup.select_one("div.entry-content,div.post-content,div.single-entry-content,.post-entry")
+    if article is None:return []
+    items=[]
+    for a in article.select("a[href]"):
+        u=urlparse(urljoin(base,a.get("href","")))
+        label=a.get_text(" ",strip=True)
+        if u.hostname=="wp.me" and u.scheme in ("http","https") and re.fullmatch(r"\\d{1,4}",label):
+            items.append((label,"https://wp.me"+u.path))
+    async def resolve(item):
+        label,short=item
+        try:
+            r=await client.get(short,follow_redirects=False,timeout=12)
+            for _ in range(5):
+                if r.status_code not in (301,302,303,307,308):break
+                target=urljoin(str(r.url),r.headers.get("location",""))
+                u=urlparse(target)
+                if u.hostname and u.hostname.endswith(".wordpress.com"):
+                    link=normalized_url(base,target)
+                    if link and urlparse(link).hostname==urlparse(base).hostname:
+                        return {"title":"Chương "+label,"url":link}
+                    break
+                if u.hostname!="wp.me":break
+                r=await client.get(target,follow_redirects=False,timeout=12)
+        except (httpx.HTTPError,ValueError):pass
+        return None
+    result=[]
+    for start in range(0,min(len(items),250),6):
+        result.extend(await asyncio.gather(*(resolve(x) for x in items[start:start+6])))
+    return [x for x in result if x]
+
+
 def chapter_links(soup,base,story_path):
     found={}
     host=(urlparse(base).hostname or "").lower()
@@ -1008,6 +1040,9 @@ async def discover(req:ReadRequest):
                             if candidate and len(candidate)<120:author_name=candidate;break
             story_path=urlparse(base).path
             found={x["url"]:x for x in chapter_links(soup,base,story_path)}
+            if (urlparse(base).hostname or "").endswith("wordpress.com"):
+                for entry in await resolve_wp_shortlinks(client,soup,base):
+                    found.setdefault(entry["url"],entry)
             wattpad_data=await wattpad_story_metadata(client,base) if (urlparse(base).hostname or '').lower().endswith('wattpad.com') else None
             if wattpad_data and wattpad_data['parts']:
                 found={part['url']:part for part in wattpad_data['parts']}
@@ -2129,6 +2164,9 @@ async def discover(req:ReadRequest):
                             if candidate and len(candidate)<120:author_name=candidate;break
             story_path=urlparse(base).path
             found={x["url"]:x for x in chapter_links(soup,base,story_path)}
+            if (urlparse(base).hostname or "").endswith("wordpress.com"):
+                for entry in await resolve_wp_shortlinks(client,soup,base):
+                    found.setdefault(entry["url"],entry)
             wattpad_data=await wattpad_story_metadata(client,base) if (urlparse(base).hostname or '').lower().endswith('wattpad.com') else None
             if wattpad_data and wattpad_data['parts']:
                 found={part['url']:part for part in wattpad_data['parts']}

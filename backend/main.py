@@ -697,6 +697,10 @@ def chapter_body(soup, source_url=''):
     content=re.sub(r" *\n *","\n",content)
     content=re.sub(r"\n{3,}","\n\n",content).strip()
     if host.endswith("wordpress.com"):
+        # WordPress novel chapters often end with bare previous/next chapter links.
+        # Strip only consecutive standalone chapter labels at the very end.
+        content=re.sub(r"(?:\\n\\s*(?:Chương|Chuong|Chapter)\\s+\\d{1,4}\\s*){1,4}$","",content,flags=re.I).rstrip()
+    if host.endswith("wordpress.com"):
         # Remove trailing WordPress rating/share/related-posts footer only.
         footer=re.search(r"(?im)^(?:Đánh giá\s*:|Chia sẻ\s*:|Thích\s+Đang tải\s*\.{0,3}|Có liên quan\s*:?)\s*$",content)
         if footer:

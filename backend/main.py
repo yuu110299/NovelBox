@@ -1385,6 +1385,15 @@ async def batch(req:BatchRequest):
                             raise
                         content,images="",[]
                         base=item["url"]
+                    actual_wordpress_title=""
+                    if (urlparse(base).hostname or "").lower().endswith("wordpress.com") and 'soup' in locals():
+                        heading=soup.select_one("h1.entry-title,h1.wp-block-post-title,article h1.entry-title,header.entry-header h1")
+                        if heading:
+                            actual_wordpress_title=heading.get_text(" ",strip=True)
+                        if not actual_wordpress_title:
+                            meta_title=soup.select_one('meta[property="og:title"]')
+                            actual_wordpress_title=(meta_title.get("content","") if meta_title else "").split(" | ")[0].strip()
+                        actual_wordpress_title=re.sub(r"\\s+[–—|-]\\s+(?:WordPress(?:\\.com)?|[^–—|]+WordPress[^–—|]*)$", "",actual_wordpress_title,flags=re.I).strip()
                     if is_luot and not content:
                         try:
                             rendered=await _render_page(item["url"])
@@ -1409,7 +1418,7 @@ async def batch(req:BatchRequest):
                     if not content and not images and (urlparse(base).hostname or "").lower().endswith("truyenfull.live"):
                         return {"title":item["title"],"url":item["url"],"content":"","images":[],"error":"Truyenfull: không tìm thấy nội dung chương trong HTML. Có thể trang bị chặn hoặc cấu trúc đã thay đổi."}
                     resolved=[image_url(base,x) for x in images] if req.include_images else []
-                    return {"title":item["title"],"url":item["url"],"content":content,"images":[x for x in resolved if x]}
+                    return {"title":actual_wordpress_title or item["title"],"url":item["url"],"content":content,"images":[x for x in resolved if x]}
                 except (httpx.HTTPError,HTTPException) as exc:
                     if isinstance(exc,httpx.HTTPStatusError):
                         reason=f"Nguồn trả HTTP {exc.response.status_code}"

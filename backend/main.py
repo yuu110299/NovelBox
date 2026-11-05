@@ -2403,7 +2403,7 @@ async def batch(req:BatchRequest):
                     if not content and not images and (urlparse(base).hostname or "").lower().endswith("truyenfull.live"):
                         return {"title":item["title"],"url":item["url"],"content":"","images":[],"error":"Truyenfull: không tìm thấy nội dung chương trong HTML. Có thể trang bị chặn hoặc cấu trúc đã thay đổi."}
                     resolved=[image_url(base,x) for x in images] if req.include_images else []
-                    return {"title":item["title"],"url":item["url"],"content":content,"images":[x for x in resolved if x]}
+                    return {"title":(soup.select_one("h1.entry-title").get_text(" ",strip=True) if (urlparse(base).hostname or "").endswith("wordpress.com") and soup.select_one("h1.entry-title") else item["title"]),"url":item["url"],"content":content,"images":[x for x in resolved if x]}
                 except (httpx.HTTPError,HTTPException) as exc:
                     if isinstance(exc,httpx.HTTPStatusError):
                         reason=f"Nguồn trả HTTP {exc.response.status_code}"
